@@ -1,0 +1,24 @@
+% FreeSerif is metric-compatible with Times New Roman, which the department
+% template uses, and unlike most Times clones shipped with TeX it declares the
+% Greek script, which polyglossia requires. FreeSans/FreeMono are its matching
+% sans and monospace faces.
+\usepackage{fontspec}
+
+\setmainfont{FreeSerif.otf}[
+  BoldFont       = FreeSerifBold.otf,
+  ItalicFont     = FreeSerifItalic.otf,
+  BoldItalicFont = FreeSerifBoldItalic.otf,
+]
+
+\setsansfont{FreeSans.otf}[
+  BoldFont       = FreeSansBold.otf,
+  ItalicFont     = FreeSansOblique.otf,
+  BoldItalicFont = FreeSansBoldOblique.otf,
+]
+
+\setmonofont{FreeMono.otf}[
+  BoldFont       = FreeMonoBold.otf,
+  ItalicFont     = FreeMonoOblique.otf,
+  BoldItalicFont = FreeMonoBoldOblique.otf,
+  Scale          = MatchLowercase,
+]

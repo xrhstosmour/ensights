@@ -1,0 +1,39 @@
+% Language. Greek is the main language, English is used for the abstract,
+% the English title page, and inline technical terms via \textenglish{...}.
+\usepackage{polyglossia}
+\setmainlanguage{greek}
+\setotherlanguage{english}
+
+\usepackage{csquotes}
+
+% Layout.
+\usepackage[a4paper,top=2.5cm,bottom=2.5cm,left=3cm,right=2.5cm]{geometry}
+\usepackage{setspace}
+\usepackage{graphicx}
+\graphicspath{{figures/}}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{float}
+
+% Tables and figures are numbered per chapter, as the department template
+% requires (Πίνακας 1.1, Διάγραμμα 3.2, ...).
+\usepackage{chngcntr}
+\counterwithin{table}{chapter}
+\counterwithin{figure}{chapter}
+
+\usepackage[font=small]{caption}
+
+% Mathematics, used by the algorithm and metric definitions.
+\usepackage{amsmath}
+\usepackage{amssymb}
+
+% Source listings for the appendix.
+\usepackage{listings}
+\usepackage{xcolor}
+
+% Bibliography. APA is one of the styles the department template allows.
+\usepackage[backend=biber,style=apa,sorting=nyt]{biblatex}
+\addbibresource{bibliography.bib}
+
+% Links last, so it can patch the packages above.
+\usepackage[hidelinks,unicode]{hyperref}

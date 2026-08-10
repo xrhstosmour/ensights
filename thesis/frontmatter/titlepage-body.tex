@@ -1,0 +1,33 @@
+% The department template's cover (εξώφυλλο) and title page (σελίδα τίτλου)
+% are identical, so the layout is defined once here and used by both.
+\newcommand{\thesistitlepagebody}{%
+  \centering
+
+  {\large\bfseries \thesisuniversity\par}
+  \vspace{0.6cm}
+  {\large\bfseries \thesisschool\par}
+  \vspace{0.4cm}
+  {\large\bfseries \thesisdepartment\par}
+
+  \vspace{3.5cm}
+
+  {\large\bfseries \thesistype\par}
+
+  \vspace{2.5cm}
+
+  {\large\bfseries \thesistitle\par}
+
+  \vspace{2cm}
+
+  {\large \thesisauthor\par}
+
+  \vspace{3cm}
+
+  {\large Επιβλέπων: \thesissupervisor\par}
+  \vspace{0.2cm}
+  {\large \thesissupervisorrank\par}
+
+  \vfill
+
+  {\large \thesisplace, \thesismonth, \thesisyear\par}
+}
