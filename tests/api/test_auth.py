@@ -1,0 +1,947 @@
+"""Integration tests for `Auth` API endpoints."""
+
+import sys
+from typing import Any
+from typing import cast
+from unittest.mock import AsyncMock
+from unittest.mock import MagicMock
+from unittest.mock import patch
+
+import pytest
+from httpx import ASGITransport
+from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.security import create_access_token
+from app.core.security import create_refresh_token
+from app.main import app
+from app.schemas.auth import RegisterRequest
+from app.services.auth_service import AuthService
+
+
+def _auth_service(session: AsyncSession) -> AuthService:
+    return AuthService(cast(AsyncSession, session))
+
+
+@pytest.fixture(name="client")
+def client_fixture() -> AsyncClient:
+    """Create a test client."""
+    transport = ASGITransport(app=app)
+    return AsyncClient(transport=transport, base_url="http://test")
+
+
+@pytest.fixture(autouse=True)
+def _mock_email_tasks() -> None:
+    """Mock email tasks module to avoid Celery dependency."""
+    mock_email = MagicMock()
+    mock_email.send_template_email_task = MagicMock()
+    sys.modules["app.tasks.email"] = mock_email
+
+
+class TestAuthLogin:
+    """Tests for POST /api/v1/auth/login."""
+
+    @pytest.mark.usefixtures("override_get_async_session")
+    async def test_login_success(self, client: AsyncClient, session) -> None:
+        """Login should succeed with valid credentials."""
+        auth_service = _auth_service(session)
+        await auth_service.register(
+            RegisterRequest(email="test@ensights.com", password="password123")
+        )
+
+        response = await client.post(
+            "/api/v1/auth/login",
+            data={"username": "test@ensights.com", "password": "password123"},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "access_token" in data
+        assert "refresh_token" in data
+        assert data["token_type"] == "bearer"
+
+    @pytest.mark.usefixtures("override_get_async_session")
+    async def test_login_wrong_password(self, client: AsyncClient, session) -> None:
+        """Login should fail with wrong password."""
+        auth_service = _auth_service(session)
+        await auth_service.register(
+            RegisterRequest(email="test@ensights.com", password="password123")
+        )
+
+        response = await client.post(
+            "/api/v1/auth/login",
+            data={
+                "username": "test@ensights.com",
+                "password": "wrongpassword",
+            },
+        )
+
+        assert response.status_code == 401
+        assert "Invalid email or password" in response.json()["detail"]
+
+    @pytest.mark.usefixtures("override_get_async_session")
+    async def test_login_user_not_found(self, client: AsyncClient) -> None:
+        """Login should fail for non-existent user."""
+        response = await client.post(
+            "/api/v1/auth/login",
+            data={
+                "username": "nonexistent@ensights.com",
+                "password": "password123",
+            },
+        )
+
+        assert response.status_code == 401
+
+    @pytest.mark.usefixtures("override_get_async_session")
+    async def test_login_inactive_user_returns_403(
+        self, client: AsyncClient, session
+    ) -> None:
+        """Login should return 403 for inactive users."""
+        auth_service = _auth_service(session)
+        user = await auth_service.register(
+            RegisterRequest(
+                email="inactive@ensights.com", password="password123"
+            )
+        )
+        await auth_service.user_repository.update(user.id, {"is_active": False})
+
+        response = await client.post(
+            "/api/v1/auth/login",
+            data={
+                "username": "inactive@ensights.com",
+                "password": "password123",
+            },
+        )
+
+        assert response.status_code == 403
+        assert "inactive" in response.json()["detail"].lower()
+
+
+class TestAuthRefresh:
+    """Tests for POST /api/v1/auth/refresh."""
+
+    @pytest.mark.usefixtures("override_get_async_session")
+    async def test_refresh_token(self, client: AsyncClient, session) -> None:
+        """Refresh token should return new access token."""
+        auth_service = _auth_service(session)
+        user = await auth_service.register(
+            RegisterRequest(
+                email="refresh@ensights.com", password="password123"
+            )
+        )
+        refresh_token = create_refresh_token(subject=user.id)
+
+        response = await client.post(
+            "/api/v1/auth/refresh",
+            json={"refresh_token": refresh_token},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "access_token" in data
+
+
+class TestAuthLogout:
+    """Tests for POST /api/v1/auth/logout."""
+
+    @pytest.mark.usefixtures("override_get_async_session")
+    async def test_logout_without_refresh_token(
+        self, client: AsyncClient, session: AsyncSession
+    ) -> None:
+        """Logout should invalidate current access token and return 204."""
+        auth_service = _auth_service(session)
+        user = await auth_service.register(
+            RegisterRequest(
+                email="logout@ensights.com", password="password123"
+            )
+        )
+        access_token = create_access_token(subject=user.id)
+
+        response = await client.post(
+            "/api/v1/auth/logout",
+            headers={"Authorization": f"Bearer {access_token}"},
+            json={},
+        )
+
+        assert response.status_code == 204
+
+    @pytest.mark.usefixtures("override_get_async_session")
+    async def test_logout_with_refresh_token(
+        self, client: AsyncClient, session: AsyncSession
+    ) -> None:
+        """Logout should accept refresh token and return 204."""
+        auth_service = _auth_service(session)
+        user = await auth_service.register(
+            RegisterRequest(
+                email="logout-refresh@ensights.com", password="password123"
+            )
+        )
+        access_token = create_access_token(subject=user.id)
+        refresh_token = create_refresh_token(subject=user.id)
+
+        response = await client.post(
+            "/api/v1/auth/logout",
+            headers={"Authorization": f"Bearer {access_token}"},
+            json={"refresh_token": refresh_token},
+        )
+
+        assert response.status_code == 204
+
+    @pytest.mark.usefixtures("override_get_async_session")
+    async def test_logout_with_invalid_refresh_token(
+        self, client: AsyncClient, session: AsyncSession
+    ) -> None:
+        """Logout should return 400 when refresh token is invalid."""
+        auth_service = _auth_service(session)
+        user = await auth_service.register(
+            RegisterRequest(
+                email="logout-invalid@ensights.com", password="password123"
+            )
+        )
+        access_token = create_access_token(subject=user.id)
+
+        response = await client.post(
+            "/api/v1/auth/logout",
+            headers={"Authorization": f"Bearer {access_token}"},
+            json={"refresh_token": "invalid-token"},
+        )
+
+        assert response.status_code == 400
+
+
+class TestAuthRegister:
+    """Tests for POST /api/v1/auth/register."""
+
+    @pytest.mark.usefixtures("override_get_async_session")
+    async def test_register_success(self, client: AsyncClient) -> None:
+        """Registration should succeed with valid data."""
+        response = await client.post(
+            "/api/v1/auth/register",
+            json={
+                "email": "newuser@ensights.com",
+                "password": "password123",
+            },
+        )
+
+        assert response.status_code == 201
+        data = response.json()
+        assert "access_token" in data
+        assert "refresh_token" in data
+
+    @pytest.mark.usefixtures("override_get_async_session")
+    async def test_register_duplicate_email(self, client: AsyncClient, session) -> None:
+        """Registration should fail with duplicate email."""
+        auth_service = _auth_service(session)
+        await auth_service.register(
+            RegisterRequest(
+                email="existing@ensights.com", password="password123"
+            )
+        )
+
+        response = await client.post(
+            "/api/v1/auth/register",
+            json={
+                "email": "existing@ensights.com",
+                "password": "password123",
+            },
+        )
+
+        assert response.status_code == 400
+
+
+class TestChangePassword:
+    """Tests for POST /api/v1/auth/change-password."""
+
+    @pytest.mark.usefixtures("override_get_async_session")
+    async def test_change_password_wrong_current_returns_400(
+        self, client: AsyncClient, session
+    ) -> None:
+        """Change password with wrong current password should return 400."""
+        auth_service = _auth_service(session)
+        user = await auth_service.register(
+            RegisterRequest(
+                email="changepw@ensights.com", password="password123"
+            )
+        )
+        access_token = create_access_token(subject=user.id)
+
+        response = await client.post(
+            "/api/v1/auth/change-password",
+            json={
+                "current_password": "wrongpassword",
+                "new_password": "newpassword123",
+            },
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+
+        assert response.status_code == 400
+        assert "incorrect" in response.json()["detail"].lower()
+
+    @pytest.mark.usefixtures("override_get_async_session")
+    async def test_change_password_success(self, client: AsyncClient, session) -> None:
+        """Change password with correct current password should return 204."""
+        auth_service = _auth_service(session)
+        user = await auth_service.register(
+            RegisterRequest(
+                email="changepw2@ensights.com", password="oldpassword1"
+            )
+        )
+        access_token = create_access_token(subject=user.id)
+
+        response = await client.post(
+            "/api/v1/auth/change-password",
+            json={
+                "current_password": "oldpassword1",
+                "new_password": "newpassword1",
+            },
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+
+        assert response.status_code == 204
+
+
+class TestEmailVerification:
+    """Tests for POST /api/v1/auth/send-verification-email
+    and GET /api/v1/auth/verify-email."""
+
+    @pytest.mark.usefixtures("override_get_async_session")
+    async def test_send_verification_email_success(
+        self,
+        client: AsyncClient,
+        session: AsyncSession,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Sending a verification email should return 204 for an unverified user."""
+        auth_service = AuthService(cast(AsyncSession, session))
+        user = await auth_service.register(
+            RegisterRequest(
+                email="unverified@ensights.com", password="password123"
+            )
+        )
+        access_token = create_access_token(subject=user.id)
+
+        # Mock Redis-backed token creation to avoid Redis dependency.
+        async def _fake_create_token(_user_id):
+            return "test-verification-token"
+
+        monkeypatch.setattr(
+            "app.core.security.create_email_verification_token",
+            _fake_create_token,
+        )
+
+        response = await client.post(
+            "/api/v1/auth/send-verification-email",
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+
+        assert response.status_code == 204
+
+    @pytest.mark.usefixtures("override_get_async_session")
+    async def test_send_verification_email_already_verified(
+        self,
+        client: AsyncClient,
+        session: AsyncSession,
+    ) -> None:
+        """Sending a verification email should return 400 if already verified."""
+        auth_service = AuthService(cast(AsyncSession, session))
+        user = await auth_service.register(
+            RegisterRequest(
+                email="verified@ensights.com", password="password123"
+            )
+        )
+        # Mark as verified directly.
+        await auth_service.verify_user(user.id)
+        access_token = create_access_token(subject=user.id)
+
+        response = await client.post(
+            "/api/v1/auth/send-verification-email",
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+
+        assert response.status_code == 400
+        assert "already verified" in response.json()["detail"]
+
+    @pytest.mark.usefixtures("override_get_async_session")
+    async def test_verify_email_success(
+        self,
+        client: AsyncClient,
+        session: AsyncSession,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Verifying email with a valid token should return 204 and set is_verified."""
+        auth_service = AuthService(cast(AsyncSession, session))
+        user = await auth_service.register(
+            RegisterRequest(
+                email="toverify@ensights.com", password="password123"
+            )
+        )
+
+        # Patch token verification to return this user's id without Redis.
+        async def _fake_verify(token: str):
+            if token == "valid-token":
+                return user.id
+            return None
+
+        monkeypatch.setattr(
+            "app.api.v1.auth.verify_email_verification_token",
+            _fake_verify,
+        )
+
+        response = await client.get(
+            "/api/v1/auth/verify-email",
+            params={"token": "valid-token"},
+        )
+
+        assert response.status_code == 204
+
+    @pytest.mark.usefixtures("override_get_async_session")
+    async def test_verify_email_invalid_token(
+        self,
+        client: AsyncClient,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Verifying email with an invalid token should return 400."""
+
+        async def _fake_verify(_token: str):
+            return None
+
+        monkeypatch.setattr(
+            "app.api.v1.auth.verify_email_verification_token",
+            _fake_verify,
+        )
+
+        response = await client.get(
+            "/api/v1/auth/verify-email",
+            params={"token": "expired-or-invalid"},
+        )
+
+        assert response.status_code == 400
+        assert "Invalid or expired" in response.json()["detail"]
+
+
+class TestPasswordReset:
+    """Tests for POST /api/v1/auth/forgot-password
+    and POST /api/v1/auth/reset-password."""
+
+    @pytest.mark.usefixtures("override_get_async_session")
+    async def test_forgot_password_registered_email(
+        self,
+        client: AsyncClient,
+        session: AsyncSession,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Requesting reset for a registered email should return 204."""
+        auth_service = AuthService(cast(AsyncSession, session))
+        await auth_service.register(
+            RegisterRequest(
+                email="reset@ensights.com", password="password123"
+            )
+        )
+
+        # Mock Redis-backed token creation to avoid Redis dependency.
+        async def _fake_create_token(_user_id):
+            return "test-reset-token"
+
+        monkeypatch.setattr(
+            "app.core.security.create_password_reset_token",
+            _fake_create_token,
+        )
+
+        response = await client.post(
+            "/api/v1/auth/forgot-password",
+            json={"email": "reset@ensights.com"},
+        )
+
+        assert response.status_code == 204
+
+    @pytest.mark.usefixtures("override_get_async_session")
+    async def test_forgot_password_unknown_email(
+        self,
+        client: AsyncClient,
+    ) -> None:
+        """Requesting reset for an unknown email should still return
+        204 (no enumeration)."""
+        response = await client.post(
+            "/api/v1/auth/forgot-password",
+            json={"email": "ghost@ensights.com"},
+        )
+
+        # Must not reveal whether the account exists.
+        assert response.status_code == 204
+
+    @pytest.mark.usefixtures("override_get_async_session")
+    async def test_reset_password_success(
+        self,
+        client: AsyncClient,
+        session: AsyncSession,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Resetting password with a valid token should return 204."""
+        auth_service = AuthService(cast(AsyncSession, session))
+        user = await auth_service.register(
+            RegisterRequest(
+                email="doreset@ensights.com", password="oldpassword1"
+            )
+        )
+
+        # Patch token verification to return this user's id without Redis.
+        async def _fake_verify(token: str):
+            if token == "valid-reset-token":
+                return user.id
+            return None
+
+        monkeypatch.setattr(
+            "app.core.security.verify_password_reset_token",
+            _fake_verify,
+        )
+
+        response = await client.post(
+            "/api/v1/auth/reset-password",
+            json={"token": "valid-reset-token", "new_password": "newpassword1"},
+        )
+
+        assert response.status_code == 204
+
+    @pytest.mark.usefixtures("override_get_async_session")
+    async def test_reset_password_invalid_token(
+        self,
+        client: AsyncClient,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Resetting password with an invalid token should return 400."""
+
+        async def _fake_verify(_token: str):
+            return None
+
+        monkeypatch.setattr(
+            "app.core.security.verify_password_reset_token",
+            _fake_verify,
+        )
+
+        response = await client.post(
+            "/api/v1/auth/reset-password",
+            json={"token": "expired-token", "new_password": "newpassword1"},
+        )
+
+        assert response.status_code == 400
+        assert "Invalid or expired" in response.json()["detail"]
+
+
+class TestTwoFactorAuth:
+    """Tests for 2FA endpoints."""
+
+    @pytest.mark.usefixtures("override_get_async_session")
+    async def test_login_issues_challenge_when_2fa_enabled(
+        self,
+        client: AsyncClient,
+        session: AsyncSession,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Login should return challenge_token when 2FA is enabled."""
+        auth_service = AuthService(cast(AsyncSession, session))
+        user = await auth_service.register(
+            RegisterRequest(
+                email="2fa-login@ensights.com", password="password123"
+            )
+        )
+        # Enable 2FA directly.
+        from datetime import UTC
+        from datetime import datetime
+
+        from app.core.encryption import encrypt
+        from app.core.security import generate_totp_secret
+
+        secret = generate_totp_secret()
+        await auth_service.user_repository.update(
+            user.id,
+            {
+                "is_2fa_enabled": True,
+                "totp_secret_encrypted": encrypt(secret),
+                "totp_confirmed_at": datetime.now(UTC),
+            },
+        )
+
+        # Mock Redis-backed challenge issuance to avoid Redis dependency.
+        monkeypatch.setattr(
+            "app.services.two_factor_service.TwoFactorAuthService.issue_challenge",
+            AsyncMock(return_value="test-challenge-token"),
+        )
+
+        response = await client.post(
+            "/api/v1/auth/login",
+            data={
+                "username": "2fa-login@ensights.com",
+                "password": "password123",
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["requires_2fa"] is True
+        assert data["challenge_token"] == "test-challenge-token"
+        assert data["access_token"] is None
+
+    @pytest.mark.usefixtures("override_get_async_session")
+    async def test_login_returns_tokens_when_2fa_disabled(
+        self,
+        client: AsyncClient,
+        session: AsyncSession,
+    ) -> None:
+        """Login should return tokens directly when 2FA is disabled."""
+        auth_service = AuthService(cast(AsyncSession, session))
+        await auth_service.register(
+            RegisterRequest(
+                email="no2fa@ensights.com", password="password123"
+            )
+        )
+
+        response = await client.post(
+            "/api/v1/auth/login",
+            data={
+                "username": "no2fa@ensights.com",
+                "password": "password123",
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data.get("requires_2fa") is False or "requires_2fa" not in data
+        assert "access_token" in data
+
+    @pytest.mark.usefixtures("override_get_async_session")
+    async def test_verify_challenge_success(
+        self,
+        client: AsyncClient,
+        session: AsyncSession,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Verifying a 2FA challenge should return tokens."""
+        auth_service = AuthService(cast(AsyncSession, session))
+        user = await auth_service.register(
+            RegisterRequest(
+                email="2fa-verify@ensights.com", password="password123"
+            )
+        )
+
+        # Mock verify_challenge to return the user without Redis.
+        async def _fake_verify_challenge(self, token: str, totp_code: str):
+            return user
+
+        monkeypatch.setattr(
+            "app.services.two_factor_service.TwoFactorAuthService.verify_challenge",
+            _fake_verify_challenge,
+        )
+
+        response = await client.post(
+            "/api/v1/auth/2fa/verify",
+            json={
+                "challenge_token": "valid-challenge",
+                "totp_code": "123456",
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "access_token" in data
+        assert "refresh_token" in data
+
+    @pytest.mark.usefixtures("override_get_async_session")
+    async def test_verify_challenge_invalid_totp(
+        self,
+        client: AsyncClient,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Verifying a 2FA challenge with an invalid TOTP code should return 401."""
+        from app.services.two_factor_service import InvalidTOTPError
+
+        async def _fake_verify_challenge(self, token: str, totp_code: str):
+            raise InvalidTOTPError("Invalid TOTP code")
+
+        monkeypatch.setattr(
+            "app.services.two_factor_service.TwoFactorAuthService.verify_challenge",
+            _fake_verify_challenge,
+        )
+
+        response = await client.post(
+            "/api/v1/auth/2fa/verify",
+            json={
+                "challenge_token": "valid-challenge",
+                "totp_code": "000000",
+            },
+        )
+
+        assert response.status_code == 401
+
+
+class TestMagicLink:
+    """Tests for passwordless magic link endpoints."""
+
+    @pytest.mark.usefixtures("override_get_async_session")
+    async def test_request_magic_link_registered(
+        self,
+        client: AsyncClient,
+        session: AsyncSession,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Requesting a magic link for a registered email should return 204."""
+        auth_service = AuthService(cast(AsyncSession, session))
+        await auth_service.register(
+            RegisterRequest(
+                email="magic@ensights.com", password="password123"
+            )
+        )
+
+        # Mock Redis token creation to avoid Redis dependency.
+        async def _fake_create_token(_user_id):
+            return "test-magic-token"
+
+        monkeypatch.setattr(
+            "app.core.security.create_magic_link_token",
+            _fake_create_token,
+        )
+
+        response = await client.post(
+            "/api/v1/auth/magic-link",
+            json={"email": "magic@ensights.com"},
+        )
+
+        assert response.status_code == 204
+
+    @pytest.mark.usefixtures("override_get_async_session")
+    async def test_request_magic_link_unknown(
+        self,
+        client: AsyncClient,
+    ) -> None:
+        """Requesting a magic link for an unknown email should still return 204."""
+        response = await client.post(
+            "/api/v1/auth/magic-link",
+            json={"email": "ghost@ensights.com"},
+        )
+
+        assert response.status_code == 204
+
+    @pytest.mark.usefixtures("override_get_async_session")
+    async def test_verify_magic_link_success(
+        self,
+        client: AsyncClient,
+        session: AsyncSession,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Verifying a valid magic link token should return tokens."""
+        auth_service = AuthService(cast(AsyncSession, session))
+        user = await auth_service.register(
+            RegisterRequest(
+                email="magic-login@ensights.com", password="password123"
+            )
+        )
+
+        async def _fake_verify_token(token: str):
+            return user.id
+
+        monkeypatch.setattr(
+            "app.core.security.verify_magic_link_token",
+            _fake_verify_token,
+        )
+
+        response = await client.post(
+            "/api/v1/auth/magic-link/verify",
+            json={"token": "valid-magic-token"},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "access_token" in data
+        assert "refresh_token" in data
+
+    @pytest.mark.usefixtures("override_get_async_session")
+    async def test_verify_magic_link_invalid(
+        self,
+        client: AsyncClient,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Verifying an invalid magic link token should return 400."""
+
+        async def _fake_verify_token(token: str):
+            return None
+
+        monkeypatch.setattr(
+            "app.core.security.verify_magic_link_token",
+            _fake_verify_token,
+        )
+
+        response = await client.post(
+            "/api/v1/auth/magic-link/verify",
+            json={"token": "invalid-token"},
+        )
+
+        assert response.status_code == 400
+
+
+class TestGoogleOAuth:
+    """Tests for Google OAuth endpoints."""
+
+    @pytest.mark.usefixtures("override_get_async_session")
+    async def test_google_auth_url_unconfigured(
+        self,
+        client: AsyncClient,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """GET /auth/google should return 503 when credentials are not set."""
+        response = await client.get(
+            "/api/v1/auth/google",
+            params={"redirect_uri": "http://localhost:3000/auth/google/callback"},
+        )
+
+        assert response.status_code == 503
+
+    @pytest.mark.usefixtures("override_get_async_session")
+    async def test_google_callback_invalid_state(
+        self,
+        client: AsyncClient,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """POST /auth/google/callback with an invalid state should return 400."""
+
+        async def _fake_verify_state(_state: str):
+            return None
+
+        monkeypatch.setattr(
+            "app.core.security.verify_google_oauth_state",
+            _fake_verify_state,
+        )
+
+        response = await client.post(
+            "/api/v1/auth/google/callback",
+            json={
+                "code": "fake-code",
+                "state": "invalid-state",
+                "redirect_uri": "http://localhost:3000/auth/google/callback",
+            },
+        )
+
+        assert response.status_code == 400
+        assert "Invalid or expired" in response.json()["detail"]
+
+
+class TestAuthRateLimit:
+    """Tests for the per-IP rate limit on unauthenticated `/auth/*` endpoints.
+
+    The `disable_rate_limit` autouse fixture (see conftest.py) overrides
+    `check_auth_rate_limit` with a no-op for every test by default. Each test
+    here removes that override for the duration of the request and mocks the
+    underlying `auth_rate_limiter.check_rate_limit()` to simulate a denied
+    request, then relies on the autouse fixture to reinstate the no-op
+    override on teardown.
+    """
+
+    @staticmethod
+    def _simulate_denied() -> Any:  # noqa: ANN401
+        import app.core.rate_limit as rate_limit_module
+
+        app.dependency_overrides.pop(rate_limit_module.check_auth_rate_limit, None)
+        return patch.object(
+            rate_limit_module.auth_rate_limiter,
+            "check_rate_limit",
+            AsyncMock(return_value=(False, 0, 30)),
+        )
+
+    @pytest.mark.usefixtures("override_get_async_session")
+    async def test_login_rate_limited_returns_429(
+        self, client: AsyncClient, session
+    ) -> None:
+        """POST /auth/login should return 429 once the IP limit is exceeded."""
+        with self._simulate_denied():
+            response = await client.post(
+                "/api/v1/auth/login",
+                data={"username": "nobody@ensights.com", "password": "x"},
+            )
+
+        assert response.status_code == 429
+        assert response.headers["retry-after"] == "30"
+
+    @pytest.mark.usefixtures("override_get_async_session")
+    async def test_register_rate_limited_returns_429(
+        self, client: AsyncClient, session
+    ) -> None:
+        """POST /auth/register should return 429 once the IP limit is exceeded."""
+        with self._simulate_denied():
+            response = await client.post(
+                "/api/v1/auth/register",
+                json={
+                    "email": "new@ensights.com",
+                    "password": "password123",
+                },
+            )
+
+        assert response.status_code == 429
+        assert response.headers["retry-after"] == "30"
+
+    @pytest.mark.usefixtures("override_get_async_session")
+    async def test_forgot_password_rate_limited_returns_429(
+        self, client: AsyncClient, session
+    ) -> None:
+        """POST /auth/forgot-password should return 429 once the IP limit is exceeded."""
+        with self._simulate_denied():
+            response = await client.post(
+                "/api/v1/auth/forgot-password",
+                json={"email": "nobody@ensights.com"},
+            )
+
+        assert response.status_code == 429
+        assert response.headers["retry-after"] == "30"
+
+    @pytest.mark.usefixtures("override_get_async_session")
+    async def test_magic_link_rate_limited_returns_429(
+        self, client: AsyncClient, session
+    ) -> None:
+        """POST /auth/magic-link should return 429 once the IP limit is exceeded."""
+        with self._simulate_denied():
+            response = await client.post(
+                "/api/v1/auth/magic-link",
+                json={"email": "nobody@ensights.com"},
+            )
+
+        assert response.status_code == 429
+        assert response.headers["retry-after"] == "30"
+
+
+class TestWebSocketTicket:
+    """Tests for POST /auth/ws-ticket."""
+
+    @pytest.mark.usefixtures("override_get_async_session")
+    async def test_returns_ticket_bound_to_current_user(
+        self, client: AsyncClient, session, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Should mint a ticket bound to the authenticated user via create_ws_ticket."""
+        auth_service = _auth_service(session)
+        user = await auth_service.register(
+            RegisterRequest(email="wsticket@ensights.com", password="password123")
+        )
+        access_token = create_access_token(subject=user.id)
+
+        captured: dict[str, str] = {}
+
+        async def _fake_create_ws_ticket(user_id: str) -> str:
+            captured["user_id"] = user_id
+            return "fake-ticket"
+
+        monkeypatch.setattr(
+            "app.api.v1.auth.create_ws_ticket", _fake_create_ws_ticket
+        )
+
+        response = await client.post(
+            "/api/v1/auth/ws-ticket",
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["ticket"] == "fake-ticket"
+        assert data["expires_in"] == 30
+        assert captured["user_id"] == str(user.id)
+
+    async def test_requires_authentication(self, client: AsyncClient) -> None:
+        """Without a bearer token the request should be rejected."""
+        response = await client.post("/api/v1/auth/ws-ticket")
+
+        assert response.status_code in (401, 403)

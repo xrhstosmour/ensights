@@ -1,0 +1,256 @@
+"""Unit tests for `Settings` module."""
+
+import pytest
+
+
+class TestSettingsValidation:
+    """Tests for settings validation."""
+
+    def test_settings_loads_defaults(self) -> None:
+        """Settings should load with default values."""
+        from app.core.settings import Settings
+
+        settings = Settings(
+            _env_file=None,
+            ENVIRONMENT="local",
+            SECRET_KEY="test-key",
+            POSTGRESQL_PASSWORD="test",
+            FIRST_SUPERUSER_PASSWORD="test",
+            RABBITMQ_PASSWORD="test",
+            CRYPTO_KEY="dGVzdC1rZXktMzItYnl0ZXMtbG9uZw==",
+            GOOGLE_CLIENT_SECRET="test-secret",
+            SMTP_PASSWORD="test-pass",
+            STORAGE_SECRET_KEY="test-key",
+        )
+
+        assert settings.PROJECT_NAME == "Ensights"
+        assert settings.API_V1_STR == "/api/v1"
+        assert settings.ENVIRONMENT == "local"
+
+    def test_settings_accepts_env_overrides(self) -> None:
+        """Settings should accept environment variable overrides."""
+        from app.core.settings import Settings
+
+        settings = Settings(
+            _env_file=None,
+            PROJECT_NAME="Test Project",
+            ENVIRONMENT="staging",
+            SECRET_KEY="test-key",
+            POSTGRESQL_PASSWORD="test",
+            FIRST_SUPERUSER_PASSWORD="test",
+            RABBITMQ_PASSWORD="test",
+            CRYPTO_KEY="dGVzdC1rZXktMzItYnl0ZXMtbG9uZw==",
+            GOOGLE_CLIENT_SECRET="test-secret",
+            SMTP_PASSWORD="test-pass",
+            STORAGE_SECRET_KEY="test-key",
+        )
+
+        assert settings.PROJECT_NAME == "Test Project"
+        assert settings.ENVIRONMENT == "staging"
+
+    def test_settings_database_uri_builds_correctly(self) -> None:
+        """Database URI should be built from components."""
+        from app.core.settings import Settings
+
+        settings = Settings(
+            _env_file=None,
+            POSTGRESQL_SERVER="localhost",
+            POSTGRESQL_PORT=5432,
+            POSTGRESQL_USER="testuser",
+            POSTGRESQL_PASSWORD="testpass",
+            POSTGRESQL_DATABASE="testdb",
+            SECRET_KEY="test-key",
+            FIRST_SUPERUSER_PASSWORD="test",
+            RABBITMQ_PASSWORD="test",
+            CRYPTO_KEY="dGVzdC1rZXktMzItYnl0ZXMtbG9uZw==",
+        )
+
+        uri = settings.DATABASE_URI
+        assert "postgresql" in str(uri)
+        assert "testuser" in str(uri)
+        assert "testdb" in str(uri)
+
+    def test_settings_redis_url_builds_correctly(self) -> None:
+        """Redis URL should be built from components."""
+        from app.core.settings import Settings
+
+        settings = Settings(
+            _env_file=None,
+            REDIS_HOST="localhost",
+            REDIS_PORT=6379,
+            REDIS_DATABASE=1,
+            REDIS_PASSWORD="",
+            SECRET_KEY="test-key",
+            POSTGRESQL_PASSWORD="test",
+            FIRST_SUPERUSER_PASSWORD="test",
+            RABBITMQ_PASSWORD="test",
+            CRYPTO_KEY="dGVzdC1rZXktMzItYnl0ZXMtbG9uZw==",
+        )
+
+        assert settings.REDIS_URL == "redis://@localhost:6379/1"
+
+    def test_settings_cors_origins_parse_list(self) -> None:
+        """CORS origins should parse list input."""
+        from app.core.settings import Settings
+
+        settings = Settings(
+            _env_file=None,
+            BACKEND_CORS_ORIGINS=["http://localhost:3000", "http://localhost:8080"],
+            FRONTEND_HOST="http://localhost:5173",
+            SECRET_KEY="test-key",
+            POSTGRESQL_PASSWORD="test",
+            FIRST_SUPERUSER_PASSWORD="test",
+            RABBITMQ_PASSWORD="test",
+            CRYPTO_KEY="dGVzdC1rZXktMzItYnl0ZXMtbG9uZw==",
+        )
+
+        assert "http://localhost:3000" in settings.all_cors_origins
+        assert "http://localhost:5173" in settings.all_cors_origins
+
+    def test_settings_warns_on_default_secrets_in_local(self) -> None:
+        """Settings should warn on default secrets in local environment."""
+        import warnings
+
+        from app.core.settings import Settings
+
+        with warnings.catch_warnings(record=True):
+            warnings.simplefilter("always")
+            Settings(_env_file=None, ENVIRONMENT="local")
+
+
+class TestPerformanceTuningDefaults:
+    """Tests for database pool and Celery tuning setting defaults."""
+
+    def test_database_pool_timeout_default(self) -> None:
+        """DATABASE_POOL_TIMEOUT defaults to 30 seconds, matching prior hardcoded value."""
+        from app.core.settings import Settings
+
+        settings = Settings(
+            _env_file=None,
+            ENVIRONMENT="local",
+            SECRET_KEY="test-key",
+            POSTGRESQL_PASSWORD="test",
+            FIRST_SUPERUSER_PASSWORD="test",
+            RABBITMQ_PASSWORD="test",
+            CRYPTO_KEY="dGVzdC1rZXktMzItYnl0ZXMtbG9uZw==",
+            GOOGLE_CLIENT_SECRET="test-secret",
+            SMTP_PASSWORD="test-pass",
+            STORAGE_SECRET_KEY="test-key",
+        )
+
+        assert settings.DATABASE_POOL_TIMEOUT == 30
+
+    def test_celery_tuning_defaults_match_prior_hardcoded_values(self) -> None:
+        """Celery tuning settings default to the values they replace."""
+        from app.core.settings import Settings
+
+        settings = Settings(
+            _env_file=None,
+            ENVIRONMENT="local",
+            SECRET_KEY="test-key",
+            POSTGRESQL_PASSWORD="test",
+            FIRST_SUPERUSER_PASSWORD="test",
+            RABBITMQ_PASSWORD="test",
+            CRYPTO_KEY="dGVzdC1rZXktMzItYnl0ZXMtbG9uZw==",
+            GOOGLE_CLIENT_SECRET="test-secret",
+            SMTP_PASSWORD="test-pass",
+            STORAGE_SECRET_KEY="test-key",
+        )
+
+        assert settings.CELERY_TASK_TIME_LIMIT == 300
+        assert settings.CELERY_TASK_SOFT_TIME_LIMIT == 240
+        assert settings.CELERY_WORKER_PREFETCH_MULTIPLIER == 4
+        assert settings.CELERY_RESULT_EXPIRES_SECONDS == 86400
+        assert settings.CELERY_CLEANUP_AUDIT_LOGS_HOUR == 3
+        assert settings.CELERY_CACHE_WARM_HOUR == 6
+        assert settings.CELERY_PURGE_GRAVEYARD_HOUR == 4
+
+    def test_database_pool_timeout_accepts_override(self) -> None:
+        """DATABASE_POOL_TIMEOUT can be overridden via settings."""
+        from app.core.settings import Settings
+
+        settings = Settings(
+            _env_file=None,
+            ENVIRONMENT="local",
+            SECRET_KEY="test-key",
+            POSTGRESQL_PASSWORD="test",
+            FIRST_SUPERUSER_PASSWORD="test",
+            RABBITMQ_PASSWORD="test",
+            CRYPTO_KEY="dGVzdC1rZXktMzItYnl0ZXMtbG9uZw==",
+            GOOGLE_CLIENT_SECRET="test-secret",
+            SMTP_PASSWORD="test-pass",
+            STORAGE_SECRET_KEY="test-key",
+            DATABASE_POOL_TIMEOUT=45,
+        )
+
+        assert settings.DATABASE_POOL_TIMEOUT == 45
+
+
+class TestSettingsValidationProduction:
+    """Tests for settings validation in non-local environments."""
+
+    def test_production_raises_on_empty_secret_key(self) -> None:
+        """Settings should raise ValueError in production when SECRET_KEY is empty."""
+        from app.core.settings import Settings
+
+        with pytest.raises(ValueError, match="SECRET_KEY is not set"):
+            Settings(
+                _env_file=None,
+                ENVIRONMENT="production",
+                SECRET_KEY="",
+            )
+
+    def test_staging_raises_on_empty_secret_key(self) -> None:
+        """Settings should raise ValueError in staging when SECRET_KEY is empty."""
+        from app.core.settings import Settings
+
+        with pytest.raises(ValueError, match="SECRET_KEY is not set"):
+            Settings(
+                _env_file=None,
+                ENVIRONMENT="staging",
+                SECRET_KEY="",
+            )
+
+    def test_production_raises_on_placeholder_secret(self) -> None:
+        """Settings should raise ValueError in production with placeholder secrets."""
+        from app.core.settings import Settings
+
+        with pytest.raises(ValueError, match="placeholder"):
+            Settings(
+                _env_file=None,
+                ENVIRONMENT="production",
+                SECRET_KEY="your-secret-key-here",
+            )
+
+
+class TestParseCors:
+    """Tests for the parse_cors helper."""
+
+    def test_single_origin_string(self) -> None:
+        """parse_cors should return a list for a single origin string."""
+        from app.core.settings import parse_cors
+
+        result = parse_cors("http://localhost:3000")
+        assert result == ["http://localhost:3000"]
+
+    def test_multiple_origins_string(self) -> None:
+        """parse_cors should return a list for a comma-separated string."""
+        from app.core.settings import parse_cors
+
+        result = parse_cors("http://a.com,http://b.com,http://c.com")
+        assert result == ["http://a.com", "http://b.com", "http://c.com"]
+
+    def test_list_input_passthrough(self) -> None:
+        """parse_cors should return list input unchanged."""
+        from app.core.settings import parse_cors
+
+        origins = ["http://a.com", "http://b.com"]
+        result = parse_cors(origins)
+        assert result is origins
+
+    def test_invalid_input_raises(self) -> None:
+        """parse_cors should raise ValueError for non-string non-list input."""
+        from app.core.settings import parse_cors
+
+        with pytest.raises(ValueError):
+            parse_cors(42)

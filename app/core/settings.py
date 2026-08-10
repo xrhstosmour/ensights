@@ -1,0 +1,396 @@
+"""Application configuration using Pydantic Settings.
+
+This module defines all application settings with environment variable support.
+Settings are validated at startup to ensure required secrets are configured.
+"""
+
+from __future__ import annotations
+
+import warnings
+from pathlib import Path
+from typing import Annotated
+from typing import Any
+from typing import Literal
+from typing import Self
+
+from pydantic import AnyUrl
+from pydantic import BeforeValidator
+from pydantic import EmailStr
+from pydantic import HttpUrl
+from pydantic import PostgresDsn
+from pydantic import computed_field
+from pydantic import model_validator
+from pydantic_settings import BaseSettings
+from pydantic_settings import SettingsConfigDict
+
+
+def parse_cors(v: Any) -> list[str] | str:  # noqa: ANN401
+    """Parse CORS origins from string or list format.
+
+    Handles both comma-separated strings and list inputs for CORS origins.
+    Used as a BeforeValidator to normalize the CORS configuration.
+
+    Args:
+        v: CORS origins as string or list
+
+    Returns:
+        List of CORS origin strings
+
+    Raises:
+        ValueError: If input format is invalid
+    """
+    if isinstance(v, str) and not v.startswith("["):
+        return [i.strip() for i in v.split(",") if i.strip()]
+    elif isinstance(v, (list, str)):
+        return v
+    raise ValueError(v)
+
+
+class Settings(BaseSettings):
+    """Application settings loaded from environment variables.
+
+    All settings can be overridden via environment variables. Sensitive values
+    are validated to ensure they are not using default/placeholder values
+    in non-local environments.
+
+    Attributes:
+        API_V1_STR: URL prefix for API versioning
+        PROJECT_NAME: Display name for the application
+        ENVIRONMENT: Deployment environment (local/staging/production)
+        SECRET_KEY: Cryptographic key for JWT signing
+        ACCESS_TOKEN_EXPIRE_MINUTES: JWT access token lifetime
+        REFRESH_TOKEN_EXPIRE_DAYS: Refresh token lifetime
+        FRONTEND_HOST: Frontend application URL for CORS
+        BACKEND_CORS_ORIGINS: Allowed CORS origins
+
+    Database:
+        POSTGRESQL_SERVER: PostgreSQL host
+        POSTGRESQL_PORT: PostgreSQL port
+        POSTGRESQL_USER: Database user
+        POSTGRESQL_PASSWORD: Database password
+        POSTGRESQL_DATABASE: Database name
+
+    Redis:
+        REDIS_HOST: Redis server host
+        REDIS_PORT: Redis server port
+        REDIS_DATABASE: Redis database number
+        REDIS_CLUSTER: Enable Redis Cluster mode (multi-node)
+
+    Celery:
+        CELERY_BROKER_URL: Celery message broker URL
+        CELERY_RESULT_BACKEND: Celery result storage URL
+
+    Rate Limiting:
+        RATE_LIMIT_PER_MINUTE: Default rate limit per user
+        RATE_LIMIT_PER_MINUTE_API_KEY: Rate limit per API key
+        RATE_LIMIT_PER_MINUTE_AUTH: Rate limit per client IP on unauthenticated
+            auth endpoints (login, register, forgot-password, magic-link)
+    """
+
+    model_config = SettingsConfigDict(
+        env_file=Path(__file__).resolve().parent.parent.parent / ".env",
+        env_file_encoding="utf-8",
+        env_ignore_empty=True,
+        extra="ignore",
+    )
+
+    def __init__(self, **values: Any) -> None:  # noqa: ANN401
+        super().__init__(**values)
+
+    # API Configuration.
+    API_V1_STR: str = "/api/v1"
+    PROJECT_NAME: str = "Ensights"
+    ENVIRONMENT: Literal["local", "staging", "production"] = "production"
+
+    # Security.
+    SECRET_KEY: str = ""
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+    ALGORITHM: Literal[
+        "HS256", "HS384", "HS512", "RS256", "RS384", "RS512", "ES256", "ES384", "ES512"
+    ] = "HS256"
+
+    # CORS.
+    FRONTEND_HOST: str = "http://localhost:5173"
+    BACKEND_CORS_ORIGINS: Annotated[
+        list[AnyUrl | str] | str, BeforeValidator(parse_cors)
+    ] = []
+
+    @computed_field  # type: ignore[prop-decorator]  # pyright: ignore[reportDecoratorUsage]
+    @property
+    def all_cors_origins(self) -> list[str]:
+        """Get all CORS origins including frontend host."""
+        if isinstance(self.BACKEND_CORS_ORIGINS, str):
+            parsed_origins = parse_cors(self.BACKEND_CORS_ORIGINS)
+            if isinstance(parsed_origins, str):
+                origins = [parsed_origins]
+            else:
+                origins = parsed_origins
+        else:
+            origins = [str(o) for o in self.BACKEND_CORS_ORIGINS]
+
+        return [str(origin).rstrip("/") for origin in origins] + [self.FRONTEND_HOST]
+
+    # PostgreSQL Database.
+    POSTGRESQL_SERVER: str = "localhost"
+    POSTGRESQL_PORT: int = 5432
+    POSTGRESQL_USER: str = "ensights"
+    POSTGRESQL_PASSWORD: str = ""
+    POSTGRESQL_DATABASE: str = "ensights"
+    POSTGRESQL_SSL_MODE: str = ""
+    POSTGRESQL_SSL_CA: str = ""
+    POSTGRESQL_SSL_CERT: str = ""
+    POSTGRESQL_SSL_KEY: str = ""
+
+    # Additional database for preview/demo/staging content.
+    # When set, the X-Database-Mode header can route requests to this database
+    # via the `database_mode_variable` contextvar and `additional_async_engine`.
+    POSTGRESQL_ADDITIONAL_DATABASE: str = "ensights_additional"
+
+    @computed_field  # type: ignore[prop-decorator]  # pyright: ignore[reportDecoratorUsage]
+    @property
+    def ADDITIONAL_DATABASE_URI(self) -> PostgresDsn:
+        """Build the additional database connection string from components."""
+        query_params: dict[str, str] = {}
+        if self.POSTGRESQL_SSL_MODE:
+            query_params["sslmode"] = self.POSTGRESQL_SSL_MODE
+        if self.POSTGRESQL_SSL_CA:
+            query_params["sslrootcert"] = self.POSTGRESQL_SSL_CA
+        if self.POSTGRESQL_SSL_CERT:
+            query_params["sslcert"] = self.POSTGRESQL_SSL_CERT
+        if self.POSTGRESQL_SSL_KEY:
+            query_params["sslkey"] = self.POSTGRESQL_SSL_KEY
+        query = None
+        if query_params:
+            query = "&".join(f"{k}={v}" for k, v in query_params.items())
+        return PostgresDsn.build(
+            scheme="postgresql+psycopg",
+            username=self.POSTGRESQL_USER,
+            password=self.POSTGRESQL_PASSWORD,
+            host=self.POSTGRESQL_SERVER,
+            port=self.POSTGRESQL_PORT,
+            path=self.POSTGRESQL_ADDITIONAL_DATABASE,
+            query=query,
+        )
+
+    @computed_field  # type: ignore[prop-decorator]  # pyright: ignore[reportDecoratorUsage]
+    @property
+    def DATABASE_URI(self) -> PostgresDsn:
+        """Build PostgreSQL connection string from components."""
+        query_params: dict[str, str] = {}
+
+        if self.POSTGRESQL_SSL_MODE:
+            query_params["sslmode"] = self.POSTGRESQL_SSL_MODE
+        if self.POSTGRESQL_SSL_CA:
+            query_params["sslrootcert"] = self.POSTGRESQL_SSL_CA
+        if self.POSTGRESQL_SSL_CERT:
+            query_params["sslcert"] = self.POSTGRESQL_SSL_CERT
+        if self.POSTGRESQL_SSL_KEY:
+            query_params["sslkey"] = self.POSTGRESQL_SSL_KEY
+
+        query = None
+        if query_params:
+            query = "&".join(f"{k}={v}" for k, v in query_params.items())
+
+        return PostgresDsn.build(
+            scheme="postgresql+psycopg",
+            username=self.POSTGRESQL_USER,
+            password=self.POSTGRESQL_PASSWORD,
+            host=self.POSTGRESQL_SERVER,
+            port=self.POSTGRESQL_PORT,
+            path=self.POSTGRESQL_DATABASE,
+            query=query,
+        )
+
+    # Redis.
+    REDIS_HOST: str = "localhost"
+    REDIS_PORT: int = 6379
+    REDIS_DATABASE: int = 0
+    REDIS_PASSWORD: str = ""
+    REDIS_CLUSTER: bool = False
+
+    # WARNING: REDIS_URL contains credentials. Do not log this value.
+    # Use REDIS_URL_REDACTED for logging/tracing instead.
+    @computed_field  # type: ignore[prop-decorator]  # pyright: ignore[reportDecoratorUsage]
+    @property
+    def REDIS_URL(self) -> str:
+        password = f":{self.REDIS_PASSWORD}" if self.REDIS_PASSWORD else ""
+        return (
+            f"redis://{password}@{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DATABASE}"
+        )
+
+    @computed_field  # type: ignore[prop-decorator]  # pyright: ignore[reportDecoratorUsage]
+    @property
+    def REDIS_URL_REDACTED(self) -> str:
+        """Redis connection URL with password masked for safe logging."""
+        return (
+            f"redis://:****@{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DATABASE}"
+        )
+
+    # Celery.
+    RABBITMQ_HOST: str = "localhost"
+    RABBITMQ_PORT: int = 5672
+    RABBITMQ_USER: str = "ensights"
+    RABBITMQ_PASSWORD: str = ""
+
+    # WARNING: CELERY_BROKER_URL contains credentials. Do not log this value.
+    # Use CELERY_BROKER_URL_REDACTED for logging/tracing instead.
+    @computed_field  # type: ignore[prop-decorator]  # pyright: ignore[reportDecoratorUsage]
+    @property
+    def CELERY_BROKER_URL(self) -> str:
+        return f"amqps://{self.RABBITMQ_USER}:{self.RABBITMQ_PASSWORD}@{self.RABBITMQ_HOST}:{self.RABBITMQ_PORT}//"
+
+    @computed_field  # type: ignore[prop-decorator]  # pyright: ignore[reportDecoratorUsage]
+    @property
+    def CELERY_BROKER_URL_REDACTED(self) -> str:
+        """Celery broker URL with password masked for safe logging."""
+        return f"amqps://{self.RABBITMQ_USER}:****@{self.RABBITMQ_HOST}:{self.RABBITMQ_PORT}//"
+
+    @computed_field  # type: ignore[prop-decorator]  # pyright: ignore[reportDecoratorUsage]
+    @property
+    def CELERY_RESULT_BACKEND(self) -> str:
+        return self.REDIS_URL.replace(
+            f"/{self.REDIS_DATABASE}", f"/{self.REDIS_DATABASE + 1}"
+        )
+
+    # Rate Limiting.
+    RATE_LIMIT_PER_MINUTE: int = 60
+    RATE_LIMIT_PER_MINUTE_API_KEY: int = 300
+    RATE_LIMIT_PER_MINUTE_AUTH: int = 10
+
+    # SSL certificate for Celery broker TLS verification.
+    SSL_CERTIFICATE_PATH: str = ""
+
+    # Idempotency.
+    IDEMPOTENCY_TTL_HOURS: int = 24
+
+    # Performance Tuning.
+    DATABASE_POOL_SIZE: int = 10
+    DATABASE_MAX_OVERFLOW: int = 20
+    DATABASE_POOL_RECYCLE: int = 3600
+    DATABASE_POOL_TIMEOUT: int = 30
+    REDIS_MAX_CONNECTIONS: int = 50
+
+    # Celery Tuning.
+    CELERY_TASK_TIME_LIMIT: int = 300
+    CELERY_TASK_SOFT_TIME_LIMIT: int = 240
+    CELERY_WORKER_PREFETCH_MULTIPLIER: int = 4
+    CELERY_RESULT_EXPIRES_SECONDS: int = 86400
+    CELERY_CLEANUP_AUDIT_LOGS_HOUR: int = 3
+    CELERY_CACHE_WARM_HOUR: int = 6
+    CELERY_PURGE_GRAVEYARD_HOUR: int = 4
+
+    # Superuser (created on first startup).
+    FIRST_SUPERUSER_EMAIL: EmailStr = "admin@ensights.com"
+    FIRST_SUPERUSER_PASSWORD: str = ""
+    FIRST_SUPERUSER_FULL_NAME: str | None = "Admin"
+
+    # Feature Flags (default states for features not yet in DB).
+    # Add flags here that should be enabled by default:.
+    # FEATURE_FLAGS: dict[str, bool] = {"new_checkout": True}
+    FEATURE_FLAGS: dict[str, bool] = {}
+
+    # Sentry Monitoring.
+    SENTRY_DSN: HttpUrl | None = None
+
+    # Google OAuth (leave empty to disable Google login).
+    GOOGLE_CLIENT_ID: str = ""
+    GOOGLE_CLIENT_SECRET: str = ""
+
+    # Google OAuth CSRF state token TTL in seconds (default: 10 minutes).
+    GOOGLE_OAUTH_STATE_TTL_SECONDS: int = 600
+
+    # PostgreSQL full-text search language configuration.
+    FTS_LANGUAGE: str = "simple"
+
+    # Magic link (passwordless login) token TTL in seconds (default: 15 minutes).
+    MAGIC_LINK_TOKEN_TTL_SECONDS: int = 900
+
+    # Two-factor authentication (TOTP).
+    TOTP_CHALLENGE_TTL_SECONDS: int = 300
+    TOTP_RATE_LIMIT_WINDOW: int = 300
+    TOTP_MAX_ATTEMPTS: int = 5
+    TOTP_REPLAY_TTL: int = 90
+    TOTP_RECOVERY_CODE_COUNT: int = 10
+
+    # Email (SMTP) - for sending transactional emails.
+    SMTP_HOST: str = "localhost"
+    SMTP_PORT: int = 587
+    SMTP_USER: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM_EMAIL: str = "noreply@ensights.com"
+    SMTP_USE_TLS: bool = True
+    CRYPTO_KEY: str = ""
+
+    # WebAuthn (passkey) settings.
+    WEBAUTHN_RP_ID: str = "localhost"
+    WEBAUTHN_RP_NAME: str = "Ensights"
+    WEBAUTHN_CHALLENGE_TTL_SECONDS: int = 300
+
+    #     # File storage (MinIO / S3-compatible).
+    STORAGE_BACKEND: str = "file"
+    STORAGE_ENDPOINT: str = ""
+    STORAGE_ACCESS_KEY: str = ""
+    STORAGE_SECRET_KEY: str = ""
+    STORAGE_BUCKET: str = "ensights-files"
+    STORAGE_REGION: str = "us-east-1"
+    STORAGE_MAX_FILE_SIZE: int = 10485760
+    STORAGE_PUBLIC_URL: str = ""
+
+    # Email verification token TTL in seconds (default: 24 hours).
+    EMAIL_VERIFICATION_TOKEN_TTL_SECONDS: int = 86400
+
+    # Password reset token TTL in seconds (default: 1 hour).
+    PASSWORD_RESET_TOKEN_TTL_SECONDS: int = 3600
+
+    __placeholder_patterns = frozenset(
+        {"your-", "change_me", "change_this", "example", "placeholder"}
+    )
+
+    def _check_secret(self, var_name: str, value: str | None) -> None:
+        """Check that a required secret is properly configured.
+
+        Warns in local environment, raises error in production.
+        Rejects empty values and known placeholder patterns.
+        """
+        if not value:
+            message = (
+                f"{var_name} is not set — "
+                "run ./scripts/setup.sh to generate it, "
+                "or set it in .env before deploying."
+            )
+            if self.ENVIRONMENT == "local":
+                warnings.warn(message, stacklevel=1)
+            else:
+                raise ValueError(message)
+        elif any(p in value.lower() for p in self.__placeholder_patterns):
+            message = (
+                f"{var_name} contains a placeholder value — "
+                "run ./scripts/setup.sh to generate a proper secret."
+            )
+            if self.ENVIRONMENT == "local":
+                warnings.warn(message, stacklevel=1)
+            else:
+                raise ValueError(message)
+
+    @model_validator(mode="after")
+    def _enforce_non_default_secrets(self) -> Self:
+        """Validate all required secrets are configured for non-local environments."""
+        self._check_secret("SECRET_KEY", self.SECRET_KEY)
+        self._check_secret("POSTGRESQL_PASSWORD", self.POSTGRESQL_PASSWORD)
+        self._check_secret("FIRST_SUPERUSER_PASSWORD", self.FIRST_SUPERUSER_PASSWORD)
+        self._check_secret("RABBITMQ_PASSWORD", self.RABBITMQ_PASSWORD)
+        self._check_secret("CRYPTO_KEY", self.CRYPTO_KEY)
+
+        if self.GOOGLE_CLIENT_ID:
+            self._check_secret("GOOGLE_CLIENT_SECRET", self.GOOGLE_CLIENT_SECRET)
+        if self.SMTP_USER:
+            self._check_secret("SMTP_PASSWORD", self.SMTP_PASSWORD)
+        if self.STORAGE_BACKEND == "s3":
+            self._check_secret("STORAGE_SECRET_KEY", self.STORAGE_SECRET_KEY)
+
+        return self
+
+
+# Global settings instance - load once at module import.
+settings = Settings()

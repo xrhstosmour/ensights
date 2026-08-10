@@ -1,0 +1,294 @@
+"""FastAPI application entry point.
+
+This module creates and configures the FastAPI application
+with all middleware, routers, and lifespan events.
+"""
+
+from __future__ import annotations
+
+import time
+from collections.abc import AsyncIterator
+from collections.abc import Awaitable
+from collections.abc import Callable
+from contextlib import asynccontextmanager
+from typing import Any
+
+import sentry_sdk
+from fastapi import FastAPI
+from fastapi import Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from fastapi.responses import Response
+from fastapi.routing import APIRoute
+from sentry_sdk.types import Event
+from sentry_sdk.types import Hint
+from starlette.middleware.gzip import GZipMiddleware
+
+from app.api.idempotency import IdempotencyMiddleware
+from app.api.request_id import RequestIDMiddleware
+from app.api.v1.router import router as api_v1_router
+from app.api.v1.websocket import start_broadcast_relay
+from app.api.v1.websocket import stop_broadcast_relay
+from app.core.cache import close_redis
+from app.core.cache import init_redis
+from app.core.logging import get_logger
+from app.core.logging import setup_logging
+from app.core.security import TokenRateLimitError
+from app.core.security_middleware import SecurityHeadersMiddleware
+from app.core.settings import settings
+from app.core.tenant import tenant_context
+from app.database import ADDITIONAL_DATABASE_MODE
+from app.database import close_db
+from app.database import database_mode_variable
+from app.database import init_db
+
+logger = get_logger("app")
+
+
+def custom_generate_unique_id(route: APIRoute) -> str:
+    """Generate unique operation IDs based on tag and route name."""
+    tag = route.tags[0] if route.tags else "default"  # type: ignore[attr-defined]
+    return f"{tag}-{route.name}"
+
+
+# Keys whose values are redacted from Sentry events, in addition to the
+# `send_default_pii=False` SDK setting, as defense in depth against PII/secret
+# leakage via exception stack frame locals, request data, and extra context.
+SENTRY_SENSITIVE_KEYS = ("password", "token", "secret", "authorization")
+
+
+def _scrub_sensitive_data(data: Any) -> Any:  # noqa: ANN401
+    """Recursively redact known-sensitive keys from Sentry event data.
+
+    Args:
+        data: A Sentry event, or any nested value within one.
+
+    Returns:
+        The same structure with values under sensitive keys replaced.
+    """
+    if isinstance(data, dict):
+        return {
+            key: "[Filtered]"
+            if isinstance(key, str)
+            and any(sensitive in key.lower() for sensitive in SENTRY_SENSITIVE_KEYS)
+            else _scrub_sensitive_data(value)
+            for key, value in data.items()
+        }
+    if isinstance(data, list):
+        return [_scrub_sensitive_data(item) for item in data]
+    return data
+
+
+def _before_send(event: Event, hint: Hint) -> Event | None:
+    """Scrub known-sensitive keys from a Sentry event before it is sent."""
+    scrubbed: Event = _scrub_sensitive_data(event)
+    return scrubbed
+
+
+if settings.SENTRY_DSN and settings.ENVIRONMENT != "local":
+    sentry_sdk.init(
+        dsn=str(settings.SENTRY_DSN),
+        enable_tracing=True,
+        # Do not attach request cookies/headers/IP or user data by default.
+        send_default_pii=False,
+        before_send=_before_send,
+    )
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    """Application lifespan handler.
+
+    Handles startup and shutdown events for the application.
+    Initializes and cleans up database and cache connections.
+    """
+    # Startup.
+    logger.info("application_starting", environment=settings.ENVIRONMENT)
+    setup_logging()
+
+    try:
+        from app.core.telemetry import setup_tracing
+
+        setup_tracing(service_name=settings.PROJECT_NAME)
+    except Exception:
+        pass
+
+    try:
+        await init_db()
+        logger.info("database_initialized")
+    except Exception as e:
+        logger.error("database_init_failed", error=str(e))
+
+    try:
+        await init_redis()
+        logger.info("redis_initialized")
+        await start_broadcast_relay()
+    except Exception as e:
+        logger.error("redis_init_failed", error=str(e))
+
+    logger.info("application_started")
+
+    yield
+
+    # Shutdown.
+    logger.info("application_shutting_down")
+    await stop_broadcast_relay()
+    await close_db()
+    await close_redis()
+    logger.info("application_shutdown_complete")
+
+
+def create_app() -> FastAPI:
+    """Create and configure the FastAPI application.
+
+    Returns:
+        Configured FastAPI application instance
+    """
+    app = FastAPI(
+        title=settings.PROJECT_NAME,
+        description="Generic e-commerce business intelligence platform: data mining and machine learning driven marketing/sales insights (frequent itemsets, clustering, forecasting, unit economics).",
+        version="1.0.0",
+        openapi_url=f"{settings.API_V1_STR}/openapi.json",
+        generate_unique_id_function=custom_generate_unique_id,
+        docs_url="/try",
+        redoc_url="/documentation",
+        lifespan=lifespan,
+    )
+
+    # CORS middleware.
+    # NOTE: Deploy behind a reverse proxy (nginx/Caddy) that validates Host headers
+    # and adds X-Forwarded-* headers. The proxy also provides TrustedHost filtering
+    # which Starlette's TrustedHostMiddleware would otherwise handle.
+    if settings.all_cors_origins:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=settings.all_cors_origins,
+            allow_credentials=True,
+            allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"],
+            allow_headers=[
+                "Authorization",
+                "Content-Type",
+                "X-Idempotency-Key",
+                "X-API-Key",
+                "X-Request-ID",
+                "Accept",
+            ],
+        )
+
+    # Compression middleware, for performance.
+    app.add_middleware(GZipMiddleware, minimum_size=1000)
+
+    # Security headers and bot blocking middleware.
+    app.add_middleware(SecurityHeadersMiddleware)
+
+    # Request ID middleware, for tracing requests across services.
+    app.add_middleware(RequestIDMiddleware)
+
+    # Idempotency middleware that protects mutating endpoints from duplicate processing.
+    # Placed after RequestIDMiddleware for correlation IDs in logs.
+    # Middleware runs in reverse registration order (LIFO) in Starlette.
+    app.add_middleware(IdempotencyMiddleware)
+
+    # Database mode middleware.
+    # Sets the database_mode_variable contextvar from the X-Database-Mode header before
+    # request processing. get_async_session() reads the contextvar to route
+    # database queries to the additional database when mode is "additional".
+    # Unknown modes are rejected with 400 so callers get immediate feedback
+    # instead of silently routing to the default database.
+    @app.middleware("http")
+    async def database_mode_middleware(
+        request: Request,
+        call_next: Callable[[Request], Awaitable[Response]],
+    ) -> Response:
+        raw = request.headers.get("X-Database-Mode", "")
+        mode = raw.strip().lower() if raw else ""
+        if mode and mode != ADDITIONAL_DATABASE_MODE:
+            return Response(
+                content=f"Unknown database mode: {mode}",
+                status_code=400,
+            )
+        token = database_mode_variable.set(mode)
+        try:
+            response = await call_next(request)
+        finally:
+            database_mode_variable.reset(token)
+        return response
+
+    # Tenant context middleware.
+    @app.middleware("http")
+    async def tenant_middleware(
+        request: Request,
+        call_next: Callable[[Request], Awaitable[Response]],
+    ) -> Response:
+        """Extract and set tenant context from request."""
+        tenant_id = getattr(request.state, "tenant_id", None)
+
+        with tenant_context(tenant_id):
+            response = await call_next(request)
+
+        return response
+
+    # Request logging middleware.
+    @app.middleware("http")
+    async def logging_middleware(
+        request: Request,
+        call_next: Callable[[Request], Awaitable[Response]],
+    ) -> Response:
+        """Log all requests with timing."""
+        start_time = time.time()
+
+        response = await call_next(request)
+
+        duration = time.time() - start_time
+
+        logger.info(
+            "request_completed",
+            method=request.method,
+            path=request.url.path,
+            status_code=response.status_code,
+            duration_ms=round(duration * 1000, 2),
+        )
+
+        return response
+
+    # Token rate limit handler.
+    @app.exception_handler(TokenRateLimitError)
+    async def token_rate_limit_handler(
+        request: Request, exception: TokenRateLimitError
+    ) -> JSONResponse:
+        """Handle token creation rate limit exceeded."""
+        return JSONResponse(
+            status_code=429,
+            content={"detail": str(exception)},
+            headers={"Retry-After": "60"},
+        )
+
+    # Global exception handler.
+    @app.exception_handler(Exception)
+    async def global_exception_handler(
+        request: Request, exc: Exception
+    ) -> JSONResponse:
+        """Handle uncaught exceptions and report to Sentry/GlitchTip."""
+        if settings.SENTRY_DSN:
+            sentry_sdk.capture_exception(exc)
+
+        logger.error(
+            "unhandled_exception",
+            error=str(exc),
+            path=request.url.path,
+            method=request.method,
+        )
+
+        return JSONResponse(
+            status_code=500,
+            content={"detail": "Internal server error"},
+        )
+
+    # Include API router.
+    app.include_router(api_v1_router)
+
+    return app
+
+
+# Application instance.
+app = create_app()

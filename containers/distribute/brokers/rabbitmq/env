@@ -1,0 +1,13 @@
+# For all strings containing special characters, use single quotes.
+# In case of older docker compose versions (<3.9), do not use single or double quotes at all.
+
+# Container's docker environment configuration.
+COMPOSE_PROJECT_NAME='lowercase_string_without_special_characters'
+
+# RABBITMQ's docker environment configuration.
+RABBITMQ_PORT=1234
+RABBITMQ_MANAGEMENT_PORT=5678
+RABBITMQ_USER='string_with_special_characters'
+RABBITMQ_PASSWORD='string_with_special_characters'
+# Consumer timeout should be in milliseconds.
+RABBITMQ_CONSUMER_TIMEOUT=910111213

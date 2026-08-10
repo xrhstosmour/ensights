@@ -1,0 +1,319 @@
+"""Integration tests for `Users` API endpoints."""
+
+from typing import cast
+from uuid import uuid7
+
+import pytest
+from httpx import ASGITransport
+from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.security import create_access_token
+from app.core.security import generate_password_hash
+from app.main import app
+from app.models.user import UserRole
+from app.schemas.auth import RegisterRequest
+from app.services.auth_service import AuthService
+
+
+def _auth_service(session: AsyncSession) -> AuthService:
+    return AuthService(cast(AsyncSession, session))
+
+
+async def _create_superuser(auth_service: AuthService) -> None:
+    return await auth_service.user_repository.create_user(
+        email=f"admin-{uuid7()}@ensights.com",
+        password_hash=generate_password_hash("password123"),
+        tenant_id=None,
+        role=UserRole.SUPERUSER,
+    )
+
+
+@pytest.fixture(name="client")
+def client_fixture() -> AsyncClient:
+    """Create a test client."""
+    transport = ASGITransport(app=app)
+    return AsyncClient(transport=transport, base_url="http://test")
+
+
+class TestUsersList:
+    """Tests for GET /api/v1/users."""
+
+    @pytest.mark.usefixtures("override_get_async_session")
+    async def test_list_users_unauthenticated(self, client: AsyncClient) -> None:
+        """List users should require authentication."""
+        response = await client.get("/api/v1/users")
+
+        assert response.status_code == 401
+
+    @pytest.mark.usefixtures("override_get_async_session")
+    async def test_list_users_authenticated(self, client: AsyncClient, session) -> None:
+        """List users should succeed with authentication."""
+        auth_service = _auth_service(session)
+        await auth_service.register(
+            RegisterRequest(email="user@ensights.com", password="password123")
+        )
+        superuser = await _create_superuser(auth_service)
+        token = create_access_token(subject=superuser.id)
+
+        response = await client.request(
+            "GET",
+            "/api/v1/users",
+            headers={"Authorization": f"Bearer {token}"},
+            json={},
+        )
+
+        assert response.status_code == 200
+
+    @pytest.mark.usefixtures("override_get_async_session")
+    async def test_list_users_pagination_headers(
+        self, client: AsyncClient, session: AsyncSession
+    ) -> None:
+        """List users should include X-Total-Count and Link headers."""
+        auth_service = _auth_service(session)
+        superuser = await _create_superuser(auth_service)
+        token = create_access_token(subject=superuser.id)
+
+        response = await client.get(
+            "/api/v1/users",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert response.status_code == 200
+        assert "x-total-count" in response.headers
+        assert response.headers["x-total-count"].isdigit()
+        assert "link" in response.headers
+        assert response.headers["link"].startswith("<")
+
+
+class TestUsersRead:
+    """Tests for GET /api/v1/users/{user_id}."""
+
+    @pytest.mark.usefixtures("override_get_async_session")
+    async def test_read_user_by_id(
+        self, client: AsyncClient, session: AsyncSession
+    ) -> None:
+        """Read user should return user data."""
+        auth_service = _auth_service(session)
+        target_user = await auth_service.register(
+            RegisterRequest(email="user@ensights.com", password="password123")
+        )
+        superuser = await _create_superuser(auth_service)
+        token = create_access_token(subject=superuser.id)
+
+        response = await client.get(
+            f"/api/v1/users/{target_user.id}",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["email"] == "user@ensights.com"
+
+    @pytest.mark.usefixtures("override_get_async_session")
+    async def test_read_user_not_found(self, client: AsyncClient, session) -> None:
+        """Read non-existent user should return 404."""
+        auth_service = _auth_service(session)
+        superuser = await _create_superuser(auth_service)
+        token = create_access_token(subject=superuser.id)
+
+        response = await client.get(
+            f"/api/v1/users/{str(uuid7())}",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert response.status_code == 404
+
+
+class TestUsersUpdate:
+    """Tests for PATCH /api/v1/users/{user_id}."""
+
+    @pytest.mark.usefixtures("override_get_async_session")
+    async def test_update_user(
+        self, client: AsyncClient, session: AsyncSession
+    ) -> None:
+        """Update user should modify user data."""
+        auth_service = _auth_service(session)
+        target_user = await auth_service.register(
+            RegisterRequest(email="user@ensights.com", password="password123")
+        )
+        superuser = await _create_superuser(auth_service)
+        token = create_access_token(subject=superuser.id)
+
+        response = await client.patch(
+            f"/api/v1/users/{target_user.id}",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"full_name": "Updated Name"},
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["full_name"] == "Updated Name"
+
+
+class TestUsersDelete:
+    """Tests for DELETE /api/v1/users/{user_id}."""
+
+    @pytest.mark.usefixtures("override_get_async_session")
+    async def test_delete_user(
+        self, client: AsyncClient, session: AsyncSession
+    ) -> None:
+        """Delete user should remove user."""
+        auth_service = _auth_service(session)
+        target_user = await auth_service.register(
+            RegisterRequest(email="user@ensights.com", password="password123")
+        )
+        superuser = await _create_superuser(auth_service)
+        token = create_access_token(subject=superuser.id)
+
+        response = await client.delete(
+            f"/api/v1/users/{target_user.id}",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert response.status_code == 204
+
+
+class TestRevokeUserSessions:
+    """Tests for POST /api/v1/users/{user_id}/revoke-sessions."""
+
+    @pytest.mark.usefixtures("override_get_async_session")
+    async def test_revoke_sessions_success(
+        self, client: AsyncClient, session: AsyncSession
+    ) -> None:
+        """Superuser should revoke all sessions for target user."""
+        auth_service = _auth_service(session)
+        target_user = await auth_service.register(
+            RegisterRequest(
+                email="revoke-target@ensights.com", password="password123"
+            )
+        )
+        superuser = await _create_superuser(auth_service)
+        token = create_access_token(subject=superuser.id)
+
+        original_token_version = target_user.token_version
+
+        response = await client.post(
+            f"/api/v1/users/{target_user.id}/revoke-sessions",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert response.status_code == 204
+
+        refreshed_user = await auth_service.user_repository.get(target_user.id)
+        assert refreshed_user is not None
+        assert refreshed_user.token_version == original_token_version + 1
+
+    @pytest.mark.usefixtures("override_get_async_session")
+    async def test_revoke_sessions_not_found(
+        self, client: AsyncClient, session: AsyncSession
+    ) -> None:
+        """Revoke should return 404 when target user does not exist."""
+        auth_service = _auth_service(session)
+        superuser = await _create_superuser(auth_service)
+        token = create_access_token(subject=superuser.id)
+
+        response = await client.post(
+            f"/api/v1/users/{uuid7()}/revoke-sessions",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert response.status_code == 404
+
+    @pytest.mark.usefixtures("override_get_async_session")
+    async def test_revoke_sessions_forbidden_for_non_superuser(
+        self, client: AsyncClient, session: AsyncSession
+    ) -> None:
+        """Non-superuser should not revoke sessions."""
+        auth_service = _auth_service(session)
+        target_user = await auth_service.register(
+            RegisterRequest(
+                email="revoke-target-2@ensights.com",
+                password="password123",
+            )
+        )
+        regular_user = await auth_service.register(
+            RegisterRequest(
+                email="regular@ensights.com",
+                password="password123",
+            )
+        )
+        token = create_access_token(subject=regular_user.id)
+
+        response = await client.post(
+            f"/api/v1/users/{target_user.id}/revoke-sessions",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert response.status_code == 403
+
+
+class TestGdprDeleteMe:
+    """Tests for DELETE /api/v1/users/me."""
+
+    @pytest.mark.usefixtures("override_get_async_session")
+    async def test_delete_me_success(
+        self, client: AsyncClient, session: AsyncSession
+    ) -> None:
+        """Deleting own account should return 204."""
+        auth_service = _auth_service(session)
+        user = await auth_service.register(
+            RegisterRequest(
+                email="todelete@ensights.com", password="password123"
+            )
+        )
+        token = create_access_token(subject=user.id)
+
+        response = await client.delete(
+            "/api/v1/users/me",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert response.status_code == 204
+
+    @pytest.mark.usefixtures("override_get_async_session")
+    async def test_delete_me_unauthenticated(self, client: AsyncClient) -> None:
+        """Deleting own account without auth should return 401."""
+        response = await client.delete("/api/v1/users/me")
+
+        assert response.status_code == 401
+
+
+class TestGdprExportMe:
+    """Tests for GET /api/v1/users/me/export."""
+
+    @pytest.mark.usefixtures("override_get_async_session")
+    async def test_export_my_data_success(
+        self, client: AsyncClient, session: AsyncSession
+    ) -> None:
+        """Exporting personal data should return 200 with JSON attachment."""
+        auth_service = _auth_service(session)
+        user = await auth_service.register(
+            RegisterRequest(
+                email="toexport@ensights.com", password="password123"
+            )
+        )
+        token = create_access_token(subject=user.id)
+
+        response = await client.get(
+            "/api/v1/users/me/export",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert response.status_code == 200
+        assert response.headers["content-type"] == "application/json"
+        assert "attachment" in response.headers.get("content-disposition", "")
+
+        data = response.json()
+        assert "profile" in data
+        assert "api_keys" in data
+        assert "activity" in data
+        assert "exported_at" in data
+        assert data["profile"]["email"] == "toexport@ensights.com"
+
+    @pytest.mark.usefixtures("override_get_async_session")
+    async def test_export_my_data_unauthenticated(self, client: AsyncClient) -> None:
+        """Exporting data without auth should return 401."""
+        response = await client.get("/api/v1/users/me/export")
+
+        assert response.status_code == 401
