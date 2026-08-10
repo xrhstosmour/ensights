@@ -1,0 +1,48 @@
+name: Thesis CI
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches: [main]
+    paths: ["thesis/**", ".github/workflows/thesis.yml"]
+
+  pull_request:
+    branches: [main]
+    paths: ["thesis/**", ".github/workflows/thesis.yml"]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    # Same image the Makefile uses with ENGINE=docker, so a local build and
+    # this job resolve identical TeX Live, biber and font versions.
+    container: texlive/texlive:latest
+    defaults:
+      run:
+        working-directory: thesis
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compile thesis
+        run: latexmk -xelatex -interaction=nonstopmode -halt-on-error -file-line-error main.tex
+
+      # A missing citation or cross-reference still exits zero, so the log is
+      # checked explicitly to keep the manuscript honest as chapters land.
+      - name: Fail on undefined references or citations
+        run: |
+          if grep -qE "LaTeX Warning: (Citation|Reference) .* undefined" main.log; then
+            echo "Undefined references or citations found:"
+            grep -E "LaTeX Warning: (Citation|Reference) .* undefined" main.log
+            exit 1
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: thesis-pdf
+          path: thesis/main.pdf
+          if-no-files-found: error

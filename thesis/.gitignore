@@ -1,0 +1,17 @@
+# LaTeX build artefacts. The compiled PDF is a build output too, it is
+# produced by CI on every push rather than committed.
+*.aux
+*.bbl
+*.bcf
+*.blg
+*.fdb_latexmk
+*.fls
+*.lof
+*.log
+*.lot
+*.out
+*.pdf
+*.run.xml
+*.synctex.gz
+*.toc
+*.xdv

@@ -1,4 +1,30 @@
-# FastAPI Backend
+# Ensights
+
+E-commerce business intelligence platform: turns transactional sales data into
+marketing and sales insights with data mining and machine learning. Built as a
+master's thesis, "Εξαγωγή Ευφυών Αναλύσεων πάνω από Επιχειρηματικά Δεδομένα",
+and kept generic enough to point at other stores through configuration alone.
+
+Read `documents/roadmap.md` first. It carries the delivery plan, the analytical
+scope, the academic constraints, and the rules that govern the parts of this
+codebase a generic FastAPI backend does not have.
+
+## Repository layout beyond the backend
+
+- `thesis/` — the LaTeX manuscript (Greek, XeLaTeX + biber). Own `Makefile` and
+  own CI job, see `documents/roadmap.md` for how chapters pair with code.
+- `documents/` — project-level docs. `roadmap.md` is the source of truth for
+  scope and sequencing.
+- `notebooks/` — experiment notebooks backing the thesis figures and metrics.
+
+## Upstream template
+
+This project is generated from the [`yap`](https://github.com/xrhstosmour/yap)
+Copier template. Fixes that are generic, meaning they would help any `yap`-based
+backend rather than this thesis, go upstream to `yap` first, then come back via
+`./scripts/synchronize.sh`. Thesis-specific domain code never goes upstream.
+
+## Backend foundation
 
 Production-ready FastAPI backend with authentication, multi-tenancy,
 background tasks, and comprehensive security features.
