@@ -184,9 +184,7 @@ class TestRevokeUserSessions:
         """Superuser should revoke all sessions for target user."""
         auth_service = _auth_service(session)
         target_user = await auth_service.register(
-            RegisterRequest(
-                email="revoke-target@ensights.com", password="password123"
-            )
+            RegisterRequest(email="revoke-target@ensights.com", password="password123")
         )
         superuser = await _create_superuser(auth_service)
         token = create_access_token(subject=superuser.id)
@@ -258,9 +256,7 @@ class TestGdprDeleteMe:
         """Deleting own account should return 204."""
         auth_service = _auth_service(session)
         user = await auth_service.register(
-            RegisterRequest(
-                email="todelete@ensights.com", password="password123"
-            )
+            RegisterRequest(email="todelete@ensights.com", password="password123")
         )
         token = create_access_token(subject=user.id)
 
@@ -289,9 +285,7 @@ class TestGdprExportMe:
         """Exporting personal data should return 200 with JSON attachment."""
         auth_service = _auth_service(session)
         user = await auth_service.register(
-            RegisterRequest(
-                email="toexport@ensights.com", password="password123"
-            )
+            RegisterRequest(email="toexport@ensights.com", password="password123")
         )
         token = create_access_token(subject=user.id)
 
