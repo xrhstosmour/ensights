@@ -99,9 +99,7 @@ class TestAuthLogin:
         """Login should return 403 for inactive users."""
         auth_service = _auth_service(session)
         user = await auth_service.register(
-            RegisterRequest(
-                email="inactive@ensights.com", password="password123"
-            )
+            RegisterRequest(email="inactive@ensights.com", password="password123")
         )
         await auth_service.user_repository.update(user.id, {"is_active": False})
 
@@ -125,9 +123,7 @@ class TestAuthRefresh:
         """Refresh token should return new access token."""
         auth_service = _auth_service(session)
         user = await auth_service.register(
-            RegisterRequest(
-                email="refresh@ensights.com", password="password123"
-            )
+            RegisterRequest(email="refresh@ensights.com", password="password123")
         )
         refresh_token = create_refresh_token(subject=user.id)
 
@@ -151,9 +147,7 @@ class TestAuthLogout:
         """Logout should invalidate current access token and return 204."""
         auth_service = _auth_service(session)
         user = await auth_service.register(
-            RegisterRequest(
-                email="logout@ensights.com", password="password123"
-            )
+            RegisterRequest(email="logout@ensights.com", password="password123")
         )
         access_token = create_access_token(subject=user.id)
 
@@ -172,9 +166,7 @@ class TestAuthLogout:
         """Logout should accept refresh token and return 204."""
         auth_service = _auth_service(session)
         user = await auth_service.register(
-            RegisterRequest(
-                email="logout-refresh@ensights.com", password="password123"
-            )
+            RegisterRequest(email="logout-refresh@ensights.com", password="password123")
         )
         access_token = create_access_token(subject=user.id)
         refresh_token = create_refresh_token(subject=user.id)
@@ -194,9 +186,7 @@ class TestAuthLogout:
         """Logout should return 400 when refresh token is invalid."""
         auth_service = _auth_service(session)
         user = await auth_service.register(
-            RegisterRequest(
-                email="logout-invalid@ensights.com", password="password123"
-            )
+            RegisterRequest(email="logout-invalid@ensights.com", password="password123")
         )
         access_token = create_access_token(subject=user.id)
 
@@ -233,9 +223,7 @@ class TestAuthRegister:
         """Registration should fail with duplicate email."""
         auth_service = _auth_service(session)
         await auth_service.register(
-            RegisterRequest(
-                email="existing@ensights.com", password="password123"
-            )
+            RegisterRequest(email="existing@ensights.com", password="password123")
         )
 
         response = await client.post(
@@ -259,9 +247,7 @@ class TestChangePassword:
         """Change password with wrong current password should return 400."""
         auth_service = _auth_service(session)
         user = await auth_service.register(
-            RegisterRequest(
-                email="changepw@ensights.com", password="password123"
-            )
+            RegisterRequest(email="changepw@ensights.com", password="password123")
         )
         access_token = create_access_token(subject=user.id)
 
@@ -282,9 +268,7 @@ class TestChangePassword:
         """Change password with correct current password should return 204."""
         auth_service = _auth_service(session)
         user = await auth_service.register(
-            RegisterRequest(
-                email="changepw2@ensights.com", password="oldpassword1"
-            )
+            RegisterRequest(email="changepw2@ensights.com", password="oldpassword1")
         )
         access_token = create_access_token(subject=user.id)
 
@@ -314,9 +298,7 @@ class TestEmailVerification:
         """Sending a verification email should return 204 for an unverified user."""
         auth_service = AuthService(cast(AsyncSession, session))
         user = await auth_service.register(
-            RegisterRequest(
-                email="unverified@ensights.com", password="password123"
-            )
+            RegisterRequest(email="unverified@ensights.com", password="password123")
         )
         access_token = create_access_token(subject=user.id)
 
@@ -345,9 +327,7 @@ class TestEmailVerification:
         """Sending a verification email should return 400 if already verified."""
         auth_service = AuthService(cast(AsyncSession, session))
         user = await auth_service.register(
-            RegisterRequest(
-                email="verified@ensights.com", password="password123"
-            )
+            RegisterRequest(email="verified@ensights.com", password="password123")
         )
         # Mark as verified directly.
         await auth_service.verify_user(user.id)
@@ -371,9 +351,7 @@ class TestEmailVerification:
         """Verifying email with a valid token should return 204 and set is_verified."""
         auth_service = AuthService(cast(AsyncSession, session))
         user = await auth_service.register(
-            RegisterRequest(
-                email="toverify@ensights.com", password="password123"
-            )
+            RegisterRequest(email="toverify@ensights.com", password="password123")
         )
 
         # Patch token verification to return this user's id without Redis.
@@ -433,9 +411,7 @@ class TestPasswordReset:
         """Requesting reset for a registered email should return 204."""
         auth_service = AuthService(cast(AsyncSession, session))
         await auth_service.register(
-            RegisterRequest(
-                email="reset@ensights.com", password="password123"
-            )
+            RegisterRequest(email="reset@ensights.com", password="password123")
         )
 
         # Mock Redis-backed token creation to avoid Redis dependency.
@@ -479,9 +455,7 @@ class TestPasswordReset:
         """Resetting password with a valid token should return 204."""
         auth_service = AuthService(cast(AsyncSession, session))
         user = await auth_service.register(
-            RegisterRequest(
-                email="doreset@ensights.com", password="oldpassword1"
-            )
+            RegisterRequest(email="doreset@ensights.com", password="oldpassword1")
         )
 
         # Patch token verification to return this user's id without Redis.
@@ -540,9 +514,7 @@ class TestTwoFactorAuth:
         """Login should return challenge_token when 2FA is enabled."""
         auth_service = AuthService(cast(AsyncSession, session))
         user = await auth_service.register(
-            RegisterRequest(
-                email="2fa-login@ensights.com", password="password123"
-            )
+            RegisterRequest(email="2fa-login@ensights.com", password="password123")
         )
         # Enable 2FA directly.
         from datetime import UTC
@@ -590,9 +562,7 @@ class TestTwoFactorAuth:
         """Login should return tokens directly when 2FA is disabled."""
         auth_service = AuthService(cast(AsyncSession, session))
         await auth_service.register(
-            RegisterRequest(
-                email="no2fa@ensights.com", password="password123"
-            )
+            RegisterRequest(email="no2fa@ensights.com", password="password123")
         )
 
         response = await client.post(
@@ -618,9 +588,7 @@ class TestTwoFactorAuth:
         """Verifying a 2FA challenge should return tokens."""
         auth_service = AuthService(cast(AsyncSession, session))
         user = await auth_service.register(
-            RegisterRequest(
-                email="2fa-verify@ensights.com", password="password123"
-            )
+            RegisterRequest(email="2fa-verify@ensights.com", password="password123")
         )
 
         # Mock verify_challenge to return the user without Redis.
@@ -686,9 +654,7 @@ class TestMagicLink:
         """Requesting a magic link for a registered email should return 204."""
         auth_service = AuthService(cast(AsyncSession, session))
         await auth_service.register(
-            RegisterRequest(
-                email="magic@ensights.com", password="password123"
-            )
+            RegisterRequest(email="magic@ensights.com", password="password123")
         )
 
         # Mock Redis token creation to avoid Redis dependency.
@@ -730,9 +696,7 @@ class TestMagicLink:
         """Verifying a valid magic link token should return tokens."""
         auth_service = AuthService(cast(AsyncSession, session))
         user = await auth_service.register(
-            RegisterRequest(
-                email="magic-login@ensights.com", password="password123"
-            )
+            RegisterRequest(email="magic-login@ensights.com", password="password123")
         )
 
         async def _fake_verify_token(token: str):
@@ -925,9 +889,7 @@ class TestWebSocketTicket:
             captured["user_id"] = user_id
             return "fake-ticket"
 
-        monkeypatch.setattr(
-            "app.api.v1.auth.create_ws_ticket", _fake_create_ws_ticket
-        )
+        monkeypatch.setattr("app.api.v1.auth.create_ws_ticket", _fake_create_ws_ticket)
 
         response = await client.post(
             "/api/v1/auth/ws-ticket",
