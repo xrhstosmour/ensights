@@ -1,0 +1,21 @@
+# For all strings containing special characters, use single quotes.
+# In case of older docker compose versions (<3.9), do not use single or double quotes at all.
+
+# Container's docker environment configuration.
+COMPOSE_PROJECT_NAME='lowercase_string_without_special_characters'
+
+# PostgreSQL's docker environment configuration.
+POSTGRESQL_HOST='string_with_special_characters'
+POSTGRESQL_PORT=1234
+POSTGRESQL_USER='string_with_special_characters'
+POSTGRESQL_PASSWORD='string_with_special_characters'
+# Existing authentication methods are:
+# 1. trust: This method allows connections unconditionally. It means any client can connect without supplying a password.
+# 2. reject: This method refuses the connection attempt unconditionally.
+# 3. md5: Requires the client to supply an MD5-hashed password for authentication.
+# 4. password: Requires the client to supply an unencrypted password for authentication. PostgreSQL will check the password against the stored MD5-hashed password.
+# 5. scram-sha-256: Requires the client to authenticate using SCRAM-SHA-256. This method is considered more secure than md5, but both the client and the server need to support it.
+# 6. ident: This method is used for operating-system level authentication. For TCP/IP connections, it works by obtaining the client's OS username, with an optional username map.
+# 7. peer: Used for local connections, it works by obtaining the client's OS username from the operating system.
+# 8. ldap, radius, cert, pam, bsd: These are other external authentication methods supported by PostgreSQL.
+POSTGRESQL_AUTHENTICATION_METHOD='string_with_special_characters'

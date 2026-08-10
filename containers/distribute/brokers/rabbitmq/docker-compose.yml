@@ -1,0 +1,41 @@
+# TODO: Use Secrets to store the passwords to all containers.
+# TODO: Implement Traefik labels for reverse proxy, even in local network.
+# TODO: Use a custom RABBITMQ_ERLANG_COOKIE.
+# TODO: Create self signed certificates the same way as all the containers using them.
+networks:
+  internal:
+    name: "internal"
+    # External means the container will be accessible from other containers in the same local network.
+    # If you want to isolate the container create a new network, with different name for each container and without being external.
+    external: true
+
+volumes:
+  rabbitmq:
+    name: "rabbitmq"
+
+services:
+  rabbitmq:
+    image: "rabbitmq:3.13-management-alpine"
+    container_name: "rabbitmq"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: "10s"
+      timeout: "5s"
+      retries: 5
+    restart: "unless-stopped"
+    networks:
+      - "internal"
+    ports:
+      - "${RABBITMQ_PORT?Variable not set}:${RABBITMQ_PORT?Variable not set}"
+      - "${RABBITMQ_MANAGEMENT_PORT?Variable not set}:15672"
+    volumes:
+      - "rabbitmq:/var/lib/rabbitmq"
+      - "./configuration/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf"
+      - "./certificates:/etc/rabbitmq/certificates"
+    environment:
+      - "RABBITMQ_USER=${RABBITMQ_USER?Variable not set}"
+      - "RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD?Variable not set}"
+      - "RABBITMQ_CONSUMER_TIMEOUT=${RABBITMQ_CONSUMER_TIMEOUT?Variable not set}"
+      - "RABBITMQ_PORT=${RABBITMQ_PORT?Variable not set}"
+    labels:
+      - "traefik.enable=false"

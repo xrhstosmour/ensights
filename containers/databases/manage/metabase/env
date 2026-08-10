@@ -1,0 +1,13 @@
+# For all strings containing special characters, use single quotes.
+# In case of older docker compose versions (<3.9), do not use single or double quotes at all.
+
+# Container's docker environment configuration.
+COMPOSE_PROJECT_NAME="lowercase_string_without_special_characters"
+
+# Metabase's docker environment configuration.
+METABASE_PORT=1234
+METABASE_DATABASE_TYPE='postgres'
+METABASE_DATABASE_NAME='string_with_special_characters'
+METABASE_DATABASE_PORT=1234
+METABASE_DATABASE_USER='string_with_special_characters'
+METABASE_DATABASE_PASSWORD='string_with_special_characters'

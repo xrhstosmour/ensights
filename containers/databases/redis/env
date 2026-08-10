@@ -1,0 +1,15 @@
+# For all strings containing special characters, use single quotes.
+# In case of older docker compose versions (<3.9), do not use single or double quotes at all.
+
+# Container's docker environment configuration.
+COMPOSE_PROJECT_NAME='lowercase_string_without_special_characters'
+
+# Redis's docker environment configuration.
+# Redis does not have username, but something calling ACL, so until investigation, just use password.
+# Use a password which does not contains special character for Redis, because a lot of packages (redBeat Scheduler: https://github.com/sibson/redbeat/issues/202), do not support it.
+REDIS_PORT=1234
+REDIS_PASSWORD="string_without_special_characters"
+REDIS_AOF_REWRITE_PERCENTAGE=123
+REDIS_MAXIMUM_CLIENTS=123
+REDIS_AOF_REWRITE_MINIMUM_SIZE="123mb"
+REDIS_MAXIMUM_MEMORY="123mb"
