@@ -122,7 +122,7 @@ Small PRs, each independently green. Sequence:
 | 10 | Profitability scenarios on the forecast | 7 |
 | 11 | Growth accounting and PMF metrics | 7 |
 | 12 | Metabase dashboards | — |
-| 13 | Per-module methodology docs | — |
+| 13 | Per-module methodology docs (`documents/methodology/`) | — |
 | 14 | Thesis polish: abstracts, front matter, chapters 1/2/3/8 | all |
 
 Chapters are drafted alongside the PR that produces their results, not batched
