@@ -51,6 +51,14 @@ dev = [
     "celery[redis]>=5.4.0",
 ]
 
+# Notebook and modelling stack. Kept out of the runtime dependencies so the
+# API image stays small; install with `uv sync --extra analysis`.
+analysis = [
+    "pandas>=2.2.0",
+    "matplotlib>=3.9.0",
+    "jupyterlab>=4.2.0",
+]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
