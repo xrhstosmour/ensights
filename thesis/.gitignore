@@ -15,3 +15,8 @@
 *.synctex.gz
 *.toc
 *.xdv
+
+# Figures are inputs, not artefacts. The notebooks produce them against the
+# imported dataset, which is not committed, so a clean checkout could not
+# compile the manuscript without them.
+!figures/*.pdf

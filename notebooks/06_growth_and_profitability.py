@@ -35,9 +35,12 @@ async def load() -> tuple[object, list[dict]]:
     """
     async with async_session_factory() as session:
         growth = await GrowthAccountingService(session).run("month")
+        # The ranges are chosen to straddle the 3:1 decision boundary for
+        # this merchant, whose observed revenue per customer is around 2900.
+        # A narrower range would pass everywhere and demonstrate nothing.
         sweep = await ProfitabilityService(session).sensitivity(
-            gross_margins=[0.2, 0.35, 0.5, 0.65],
-            acquisition_costs=[5.0, 15.0, 40.0],
+            gross_margins=[0.15, 0.30, 0.45, 0.60],
+            acquisition_costs=[100.0, 250.0, 500.0, 900.0],
         )
         return growth, sweep
 
@@ -69,13 +72,22 @@ flows = pd.DataFrame([
 print(flows.round(2).to_string())
 
 columns = ["new", "resurrected", "expansion", "contraction", "churned"]
+# Greek names for the plot, matching the terminology used in the manuscript.
+FLOW_LABELS = {
+    "new": "νέα",
+    "resurrected": "αναβιωμένα",
+    "expansion": "επέκταση",
+    "contraction": "συρρίκνωση",
+    "churned": "απώλεια",
+}
 figure, axes = plt.subplots(figsize=(12, 5))
 bottom_positive = pd.Series(0.0, index=flows.index)
 bottom_negative = pd.Series(0.0, index=flows.index)
 for column in columns:
     values = flows[column]
     bottom = bottom_positive if values.ge(0).all() else bottom_negative
-    axes.bar(flows.index, values, bottom=bottom, width=20, label=column)
+    axes.bar(flows.index, values, bottom=bottom, width=20,
+             label=FLOW_LABELS[column])
     if values.ge(0).all():
         bottom_positive = bottom_positive + values
     else:
@@ -152,6 +164,11 @@ axes.set_yticklabels(pivot.index)
 axes.set_xlabel("Υποτιθέμενο κόστος απόκτησης")
 axes.set_ylabel("Υποτιθέμενο περιθώριο")
 axes.set_title("Λόγος LTV:CAC υπό διαφορετικές παραδοχές")
+for row_index, margin in enumerate(pivot.index):
+    for column_index, cost in enumerate(pivot.columns):
+        ratio = pivot.loc[margin, cost]
+        axes.text(column_index, row_index, f"{ratio:.2f}", ha="center",
+                  va="center", fontsize=9)
 figure.colorbar(image, ax=axes, label="LTV:CAC")
 figure.tight_layout()
 figure.savefig(FIGURES / "profitability_sensitivity.pdf")
