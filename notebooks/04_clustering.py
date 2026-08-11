@@ -114,11 +114,27 @@ if pooled:
         ])
         print("\n", summary.to_string(index=False))
 
+        # Colour by sub-cluster rather than plotting one undifferentiated
+        # cloud: the second level is the point of the figure, and a single
+        # colour would show only that customers vary.
+        membership = {
+            key: child.label
+            for child in largest.children
+            for key in child.members
+        }
+        frame["cluster"] = frame["key"].map(membership)
+
+        capped = frame["monetary"].clip(upper=frame["monetary"].quantile(0.99))
+
         figure, axes = plt.subplots(figsize=(8, 5))
-        axes.scatter(frame["recency_days"], frame["monetary"].clip(upper=frame["monetary"].quantile(0.99)),
-                     s=8, alpha=0.4)
+        for child in largest.children:
+            selected = frame["cluster"] == child.label
+            axes.scatter(frame.loc[selected, "recency_days"], capped[selected],
+                         s=10, alpha=0.5,
+                         label=f"[{child.label}] n={child.size}")
         axes.set_xlabel("Προσφατότητα (ημέρες)")
         axes.set_ylabel("Χρηματική αξία")
-        axes.set_title(f"Πελάτες της συστάδας [{largest.label}]")
+        axes.set_title(f"Υποσυστάδες RFM εντός της συστάδας [{largest.label}]")
+        axes.legend()
         figure.tight_layout()
         figure.savefig(FIGURES / "rfm_scatter.pdf")
