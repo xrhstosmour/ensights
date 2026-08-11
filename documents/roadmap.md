@@ -37,6 +37,12 @@ The analytical scope started from what real customers said they care about:
 Extended, on top of the original brief, with the economics that decide whether
 any of the above is worth acting on: GMV, repeat customers, and profitability.
 
+Extended again with growth accounting: the six-flow revenue decomposition and
+concentration measures from the quantitative product-market-fit literature.
+These are business-model agnostic, which is what lets the same system serve a
+subscription store, a one-off gift retailer and a wholesaler without
+recalibration.
+
 ## Academic direction
 
 Set by the supervisor, these are requirements and not suggestions:
@@ -114,9 +120,10 @@ Small PRs, each independently green. Sequence:
 | 8 | Nested clustering, region/time then RFM, evaluation | 6 |
 | 9 | Sales forecasting, backtested | 7 |
 | 10 | Profitability scenarios on the forecast | 7 |
-| 11 | Metabase dashboards | — |
-| 12 | Per-module methodology docs | — |
-| 13 | Thesis polish: abstracts, front matter, chapters 1/2/3/8 | all |
+| 11 | Growth accounting and PMF metrics | 7 |
+| 12 | Metabase dashboards | — |
+| 13 | Per-module methodology docs | — |
+| 14 | Thesis polish: abstracts, front matter, chapters 1/2/3/8 | all |
 
 Chapters are drafted alongside the PR that produces their results, not batched
 at the end.
