@@ -14,6 +14,7 @@ from app.api.v1.files import router as files_router
 from app.api.v1.forecasting import router as forecasting_router
 from app.api.v1.growth_accounting import router as growth_accounting_router
 from app.api.v1.health import router as health_router
+from app.api.v1.ingestion import router as ingestion_router
 from app.api.v1.market_basket import router as market_basket_router
 from app.api.v1.profitability import router as profitability_router
 from app.api.v1.segmentation import router as segmentation_router
@@ -30,6 +31,7 @@ router.include_router(files_router)
 router.include_router(tenants_router)
 router.include_router(health_router)
 router.include_router(feature_flags_router)
+router.include_router(ingestion_router)
 router.include_router(analytics_router)
 router.include_router(business_metrics_router)
 router.include_router(market_basket_router)
