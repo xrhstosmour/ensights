@@ -1,0 +1,60 @@
+"""Data import background tasks via Celery.
+
+Importing a full retail export runs to millions of lines, far past any
+request's lifetime, so imports are always dispatched to a worker.
+"""
+
+from __future__ import annotations
+
+from app.celery_app import celery_app
+from app.core.logging import get_logger
+
+logger = get_logger("tasks.ingestion")
+
+
+@celery_app.task(
+    bind=True,
+    name="app.tasks.ingestion.import_online_retail",
+    max_retries=1,
+    default_retry_delay=60,
+)
+def import_online_retail_task(self, path: str, tenant_id: str | None = None) -> dict:
+    """Import an Online Retail II CSV export into the canonical schema.
+
+    Args:
+        path: Location of the CSV file to import.
+        tenant_id: Tenant to attribute the imported rows to, when scoping the
+            import to one store.
+
+    Returns:
+        Result dict with the import counters.
+    """
+    import asyncio
+
+    from app.core.tenant import set_current_tenant_id
+    from app.database import async_session_factory
+    from app.ingestion.online_retail import OnlineRetailCSVAdapter
+    from app.services.ingestion_service import IngestionService
+
+    async def _run() -> dict:
+        if tenant_id is not None:
+            from uuid import UUID
+
+            set_current_tenant_id(UUID(tenant_id))
+
+        async with async_session_factory() as session:
+            service = IngestionService(session)
+            summary = await service.import_from(OnlineRetailCSVAdapter(path))
+
+        return {
+            "status": "completed",
+            "orders_created": summary.orders_created,
+            "order_items_created": summary.order_items_created,
+            "returns_created": summary.returns_created,
+            "transactions_skipped": summary.transactions_skipped,
+            "customers_created": summary.customers_created,
+            "products_created": summary.products_created,
+            "regions_created": summary.regions_created,
+        }
+
+    return asyncio.run(_run())

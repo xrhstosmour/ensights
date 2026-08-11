@@ -28,6 +28,7 @@ celery_app = Celery(
         "app.tasks.email",
         "app.tasks.cache",
         "app.tasks.cleanup",
+        "app.tasks.ingestion",
         "app.tasks.outbox",
         "app.tasks.storage",
     ],
