@@ -4,8 +4,8 @@
 \setlength{\parindent}{0pt}
 \setlength{\parskip}{6pt plus 2pt minus 1pt}
 
-% Headings. The department template numbers chapters plainly ("1.Τίτλος"),
-% without the report class's "Κεφάλαιο 1" prefix and without forcing each
+% Headings. The department template numbers chapters plainly, as "1.Title",
+% without the report class's chapter-word prefix and without forcing each
 % chapter onto a fresh page break style of its own.
 \usepackage{titlesec}
 
@@ -21,9 +21,9 @@
   {\normalfont\normalsize\bfseries}{\thesubsection}{0.5em}{}
 \titlespacing*{\subsection}{0pt}{14pt}{7pt}
 
-% Front matter headings that are not numbered chapters, for example
-% ΕΥΧΑΡΙΣΤΙΕΣ and ΠΕΡΙΛΗΨΗ, share the chapter look but stay out of the
-% numbering sequence while still appearing in the table of contents.
+% Front matter headings that are not numbered chapters, for example the
+% acknowledgements and the abstracts, share the chapter look but stay out of
+% the numbering sequence while still appearing in the table of contents.
 \newcommand{\unnumberedchapter}[1]{%
   \chapter*{#1}%
   \addcontentsline{toc}{chapter}{#1}%
@@ -56,9 +56,9 @@
 % Table captions sit below the table in the department template, so
 % \caption is always placed after the tabular body in this document.
 
-% Appendices are lettered with Greek capitals (Α, Β, Γ, ...) rather than the
+% Appendices are lettered with Greek capitals rather than the
 % Latin A, B, C that \Alph produces. Note that the department template skips
-% the digamma-style ΣΤ and just continues through the alphabet.
+% the digamma-style sixth letter and just continues through the alphabet.
 \newcommand{\greekalphnum}[1]{%
   \ifcase\value{#1}\or Α\or Β\or Γ\or Δ\or Ε\or Ζ\or Η\or Θ\or Ι\or Κ\or
   Λ\or Μ\or Ν\or Ξ\or Ο\or Π\or Ρ\or Σ\or Τ\or Υ\or Φ\or Χ\or Ψ\or Ω\fi
