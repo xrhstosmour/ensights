@@ -3,10 +3,157 @@
 \appendix
 \renewcommand{\thechapter}{\greekalphnum{chapter}}
 
-\chapter{Πηγαίος κώδικας}
+% Bookmarks and internal anchors cannot carry the Greek numeral, which is not
+% expandable inside a PDF string, so they keep a plain arabic counter. Only
+% the printed letter changes; every reference still resolves.
+\renewcommand{\theHchapter}{appendix.\arabic{chapter}}
 
-% TODO: Code excerpts for the core algorithms.
+\chapter{Πηγαίος κώδικας}
+\label{app:code}
+
+Παρατίθενται τα δύο αποσπάσματα στα οποία συμπυκνώνονται οι μεθοδολογικές
+επιλογές των κεφαλαίων~\ref{chap:clustering} και~\ref{chap:forecasting-economics}.
+Ο πλήρης κώδικας είναι διαθέσιμος στο αποθετήριο της εργασίας.
+
+\section{Εμφωλευμένη συσταδοποίηση}
+
+Το πρώτο απόσπασμα υλοποιεί τη δομή δένδρου: μια κατάτμηση ως προς την περιοχή
+και τον χρόνο και, εντός κάθε συστάδας, δεύτερη κατάτμηση ως προς τα
+χαρακτηριστικά RFM. Οι εγγραφές δεύτερου επιπέδου συγκεντρώνονται για ολόκληρη
+τη συστάδα πριν την επανάληψη, ώστε το δεύτερο επίπεδο να περιγράφει την αγορά
+ως ενιαία οντότητα και όχι κάθε περιοχή χωριστά.
+
+\begin{lstlisting}[language=Python,caption={Συσταδοποίηση δύο επιπέδων},label={lst:nested}]
+result = partition(
+    rows,
+    first_level_features,
+    k_range=k_range,
+    level=1,
+    random_state=random_state,
+)
+
+for cluster in result.clusters:
+    # Pool every second-level row belonging to any member of this cluster,
+    # so the sub-clustering sees the group as a whole rather than one
+    # member at a time.
+    pooled: list[dict[str, Any]] = []
+    for member in cluster.members:
+        pooled.extend(second_level_rows.get(member, []))
+
+    if not pooled:
+        continue
+
+    child = partition(
+        pooled,
+        second_level_features,
+        k_range=k_range,
+        label_prefix=f"{cluster.label}.",
+        level=cluster.level + 1,
+        random_state=random_state,
+    )
+    cluster.children = child.clusters
+\end{lstlisting}
+
+Η επιλογή του πλήθους συστάδων γίνεται από τα δεδομένα. Για κάθε υποψήφια τιμή
+υπολογίζεται ο δείκτης περιγράμματος και κρατείται η καλύτερη, ενώ μια
+κατάτμηση που κατέρρευσε σε λιγότερες από δύο ομάδες δεν βαθμολογείται
+καθόλου.
+
+\begin{lstlisting}[language=Python,caption={Επιλογή του $k$ με δείκτη περιγράμματος},label={lst:silhouette}]
+scaled = StandardScaler().fit_transform(matrix)
+
+for k in candidates:
+    model = KMeans(n_clusters=k, random_state=random_state, n_init=10)
+    labels = model.fit_predict(scaled)
+    # An assignment that collapsed to fewer than k groups cannot be scored.
+    if len(set(labels)) < 2:
+        continue
+    score = float(silhouette_score(scaled, labels))
+    result.scores[k] = score
+    if best_score is None or score > best_score:
+        best_k, best_score, best_labels = k, score, labels
+\end{lstlisting}
+
+\section{Αποσύνθεση των εσόδων σε ροές}
+
+Το δεύτερο απόσπασμα κατατάσσει τα έσοδα κάθε πελάτη σε μία ακριβώς από τις
+έξι ροές της ενότητας~\ref{sec:growth-accounting}. Η αποκλειστικότητα αυτή
+είναι που καθιστά τις λογιστικές ταυτότητες ελέγξιμες.
+
+\begin{lstlisting}[language=Python,caption={Κατάταξη των εσόδων σε έξι ροές},label={lst:flows}]
+for customer, revenue in current.items():
+    before = previous.get(customer, 0.0)
+    if before > 0:
+        # Active in both periods: the overlap is retained, and the
+        # difference is expansion or contraction.
+        result.retained += min(before, revenue)
+        if revenue > before:
+            result.expansion += revenue - before
+        else:
+            result.contraction += before - revenue
+    elif customer in seen_before:
+        result.resurrected += revenue
+    else:
+        result.new += revenue
+
+for customer, before in previous.items():
+    if current.get(customer, 0.0) == 0 and before > 0:
+        result.churned += before
+\end{lstlisting}
 
 \chapter{Αναλυτικά αποτελέσματα}
+\label{app:results}
 
-% TODO: Result tables too large for the main text.
+\section{Πλήρες πλέγμα ευαισθησίας των μοναδιαίων οικονομικών}
+
+Ο πίνακας~\ref{tab:sensitivity} του κεφαλαίου~\ref{chap:forecasting-economics}
+παραθέτει επιλεγμένα κελιά. Εδώ παρατίθεται το πλέγμα στο σύνολό του, ώστε η
+κατανομή των θετικών και αρνητικών αποτελεσμάτων να είναι ελέγξιμη και όχι
+επιλεγμένη.
+
+Η μέση παρατηρούμενη αξία ανά πελάτη είναι 2.895. Η αξία διάρκειας ζωής
+υπολογίζεται επί του μεικτού κέρδους, δηλαδή ως γινόμενο της αξίας αυτής με το
+υποτιθέμενο περιθώριο.
+
+\begin{table}[H]
+\centering
+\begin{tabular}{rrrrc}
+\toprule
+Περιθώριο & CAC & LTV & LTV:CAC & Πληροί 3:1 \\
+\midrule
+0,15 & 100 &   434 & 4,34 & ναι \\
+0,15 & 250 &   434 & 1,74 & όχι \\
+0,15 & 500 &   434 & 0,87 & όχι \\
+0,15 & 900 &   434 & 0,48 & όχι \\
+\midrule
+0,30 & 100 &   868 & 8,69 & ναι \\
+0,30 & 250 &   868 & 3,47 & ναι \\
+0,30 & 500 &   868 & 1,74 & όχι \\
+0,30 & 900 &   868 & 0,96 & όχι \\
+\midrule
+0,45 & 100 & 1.303 & 13,03 & ναι \\
+0,45 & 250 & 1.303 &  5,21 & ναι \\
+0,45 & 500 & 1.303 &  2,61 & όχι \\
+0,45 & 900 & 1.303 &  1,45 & όχι \\
+\midrule
+0,60 & 100 & 1.737 & 17,37 & ναι \\
+0,60 & 250 & 1.737 &  6,95 & ναι \\
+0,60 & 500 & 1.737 &  3,47 & ναι \\
+0,60 & 900 & 1.737 &  1,93 & όχι \\
+\bottomrule
+\end{tabular}
+\caption{Πλήρες πλέγμα ευαισθησίας, 16 κελιά}
+\label{tab:sensitivity-full}
+\end{table}
+
+Οκτώ κελιά πληρούν το σημείο αναφοράς 3:1 και οκτώ όχι. Το κρίσιμο σημείο δεν
+είναι η αναλογία αυτή, η οποία εξαρτάται από το επιλεγμένο εύρος, αλλά το ότι
+το συμπέρασμα αντιστρέφεται εντός εύρους παραδοχών που όλες θα μπορούσαν να
+χαρακτηριστούν εύλογες.
+
+\section{Δείκτες περιγράμματος ανά υποψήφιο πλήθος συστάδων}
+
+Οι βαθμολογίες του πρώτου επιπέδου παρατίθενται στον
+πίνακα~\ref{tab:silhouette}. Η τιμή $k=2$ υπερέχει σαφώς, και η πτώση από
+0,8793 σε 0,7206 με μία μόνο επιπλέον συστάδα δείχνει ότι η δομή των δεδομένων
+είναι δυαδική και όχι βαθμιαία: η εγχώρια αγορά έναντι των εξαγωγικών.
