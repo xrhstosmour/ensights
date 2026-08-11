@@ -105,6 +105,7 @@ async def start_run(
             maximum_itemset_size=maximum_itemset_size,
             start=start.isoformat() if start else None,
             end=end.isoformat() if end else None,
+            tenant_id=str(_superuser.tenant_id) if _superuser.tenant_id else None,
         )
     except FrequentItemsetError as error:
         raise HTTPException(
