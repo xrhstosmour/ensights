@@ -32,6 +32,10 @@ dependencies = [
     "boto3>=1.35.0",
     "Pillow>=10.0.0",
     "pybreaker>=0.8.0",
+    # Analysis stack. These are runtime dependencies, not notebook extras:
+    # the mining and clustering tasks run inside Celery workers.
+    "pandas>=2.2.0",
+    "mlxtend>=0.23.0",
     "opentelemetry-api>=1.27.0",
     "opentelemetry-sdk>=1.27.0",
     "amqp>=5.3.0",
@@ -54,7 +58,6 @@ dev = [
 # Notebook and modelling stack. Kept out of the runtime dependencies so the
 # API image stays small; install with `uv sync --extra analysis`.
 analysis = [
-    "pandas>=2.2.0",
     "matplotlib>=3.9.0",
     "jupyterlab>=4.2.0",
 ]
@@ -84,6 +87,8 @@ module = [
     "botocore.*",
     "pybreaker.*",
     "phonenumbers.*",
+    "mlxtend.*",
+    "pandas.*",
 ]
 ignore_missing_imports = true
 
