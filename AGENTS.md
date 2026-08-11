@@ -16,6 +16,8 @@ codebase a generic FastAPI backend does not have.
 - `documents/` — project-level docs. `roadmap.md` is the source of truth for
   scope and sequencing.
 - `notebooks/` — experiment notebooks backing the thesis figures and metrics.
+- `metabase/` — SQL cards mirroring the API, for dashboards. A card and its
+  endpoint must always return the same numbers.
 
 ## Upstream template
 
