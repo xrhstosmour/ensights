@@ -1,4 +1,4 @@
-% Σελίδα έγκρισης από την τριμελή εξεταστική επιτροπή.
+% Approval page, signed by the three-member examination committee.
 \thispagestyle{empty}
 
 {\bfseries Εγκρίθηκε από τριμελή εξεταστική επιτροπή}
@@ -14,34 +14,34 @@
 \begin{enumerate}
   \item Επιβλέπων καθηγητής
 
-        \thesissupervisor,
+        \thesissupervisor\ifthesisshowranks,
 
-        \thesissupervisorrank
-
-  \vspace{0.5cm}
-
-  \item Μέλος επιτροπής
-
-        \thesiscommitteesecond,
-
-        \thesiscommitteesecondrank
+        \thesissupervisorrank\fi
 
   \vspace{0.5cm}
 
   \item Μέλος επιτροπής
 
-        \thesiscommitteethird,
+        \thesiscommitteesecond\ifthesisshowranks,
 
-        \thesiscommitteethirdrank
+        \thesiscommitteesecondrank\fi
+
+  \vspace{0.5cm}
+
+  \item Μέλος επιτροπής
+
+        \thesiscommitteethird\ifthesisshowranks,
+
+        \thesiscommitteethirdrank\fi
 \end{enumerate}
 
 \vspace{2.5cm}
 
 Ο/Η Προϊστάμενος/η του Τμήματος
 
-\thesisheadofdepartment,
+\thesisheadofdepartment\ifthesisshowranks,
 
-\thesisheadofdepartmentrank
+\thesisheadofdepartmentrank\fi
 
 \vspace{0.8cm}
 

@@ -2,7 +2,7 @@
 
 E-commerce business intelligence platform: turns transactional sales data into
 marketing and sales insights with data mining and machine learning. Built as a
-master's thesis, "Εξαγωγή Ευφυών Αναλύσεων πάνω από Επιχειρηματικά Δεδομένα",
+master's thesis, "Εξαγωγή Ευφυών Αναλύσεων από Δεδομένα Ηλεκτρονικού Εμπορίου",
 and kept generic enough to point at other stores through configuration alone.
 
 Read `documents/roadmap.md` first. It carries the delivery plan, the analytical
