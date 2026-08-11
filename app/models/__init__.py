@@ -5,6 +5,8 @@ Import models from here for consistency.
 """
 
 from app.models.api_key import APIKey
+from app.models.association_rule import AssociationRule
+from app.models.association_rule import FrequentItemset
 from app.models.audit_log import AuditAction
 from app.models.audit_log import AuditLog
 from app.models.base import BaseModel
@@ -27,11 +29,13 @@ from app.models.webauthn_credential import WebAuthnCredential
 
 __all__ = [
     "APIKey",
+    "AssociationRule",
     "AuditAction",
     "AuditLog",
     "BaseModel",
     "Customer",
     "FeatureFlag",
+    "FrequentItemset",
     "File",
     "OAuthAccount",
     "OAuthProvider",
