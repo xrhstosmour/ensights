@@ -13,13 +13,11 @@ online retail industry".
 from __future__ import annotations
 
 import csv
-from datetime import datetime
-from decimal import Decimal
-from decimal import InvalidOperation
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from app.core.logging import get_logger
+from app.ingestion import normalisation
 from app.ingestion.base import CanonicalRecord
 from app.ingestion.base import DataSourceAdapter
 
@@ -82,74 +80,6 @@ _REQUIRED_FIELDS = (
     "ordered_at",
     "unit_price",
 )
-
-# Formats seen across exports of this dataset, tried in order.
-_DATE_FORMATS = (
-    "%Y-%m-%d %H:%M:%S",
-    "%d/%m/%Y %H:%M",
-    "%m/%d/%Y %H:%M",
-    "%Y-%m-%d %H:%M",
-    "%d/%m/%Y %H:%M:%S",
-)
-
-
-def _parse_datetime(raw: str) -> datetime | None:
-    """Parse a source timestamp, trying each known export format.
-
-    Args:
-        raw: Timestamp text from the source.
-
-    Returns:
-        The parsed datetime, or None when no known format matches.
-    """
-    text = raw.strip()
-    if not text:
-        return None
-    for date_format in _DATE_FORMATS:
-        try:
-            return datetime.strptime(text, date_format)
-        except ValueError:
-            continue
-    try:
-        return datetime.fromisoformat(text)
-    except ValueError:
-        return None
-
-
-def _parse_decimal(raw: str) -> Decimal | None:
-    """Parse a source money value.
-
-    Args:
-        raw: Numeric text from the source.
-
-    Returns:
-        The parsed decimal, or None when the value is blank or malformed.
-    """
-    text = raw.strip().replace(",", "")
-    if not text:
-        return None
-    try:
-        return Decimal(text)
-    except InvalidOperation:
-        return None
-
-
-def _parse_int(raw: str) -> int | None:
-    """Parse a source quantity, tolerating values written as decimals.
-
-    Args:
-        raw: Numeric text from the source.
-
-    Returns:
-        The parsed integer, or None when the value is blank or malformed.
-    """
-    text = raw.strip()
-    if not text:
-        return None
-    try:
-        return int(Decimal(text))
-    except (InvalidOperation, ValueError):
-        return None
 
 
 class OnlineRetailCSVAdapter(DataSourceAdapter):
@@ -260,58 +190,47 @@ class OnlineRetailCSVAdapter(DataSourceAdapter):
                 order_number = value(row, "order_number")
                 stock_code = value(row, "stock_code")
                 if not order_number or not stock_code:
-                    skip("missing_identifier")
+                    skip(normalisation.MISSING_IDENTIFIER)
                     continue
 
-                # Postage, fees, adjustments and the like are not merchandise
-                # and would otherwise top every ranking.
-                normalised_code = stock_code.upper()
-                if normalised_code in self.non_product_codes or (
-                    normalised_code.startswith("GIFT_")
-                ):
-                    skip("non_product_code")
-                    continue
-
-                ordered_at = _parse_datetime(value(row, "ordered_at"))
+                ordered_at = normalisation.parse_datetime(value(row, "ordered_at"))
                 if ordered_at is None:
-                    skip("unparseable_date")
+                    skip(normalisation.UNPARSEABLE_DATE)
                     continue
 
-                quantity = _parse_int(value(row, "quantity"))
+                quantity = normalisation.parse_int(value(row, "quantity"))
                 if quantity is None:
-                    skip("unparseable_quantity")
-                    continue
-                if quantity == 0:
-                    skip("zero_quantity")
+                    skip(normalisation.UNPARSEABLE_QUANTITY)
                     continue
 
-                unit_price = _parse_decimal(value(row, "unit_price"))
+                unit_price = normalisation.parse_decimal(value(row, "unit_price"))
                 if unit_price is None:
-                    skip("unparseable_price")
-                    continue
-                if unit_price <= 0:
-                    # Stock adjustments and bad-debt entries, not trade.
-                    skip("non_positive_price")
+                    skip(normalisation.UNPARSEABLE_PRICE)
                     continue
 
-                customer_identifier = value(row, "customer_identifier") or None
-                region_name = value(row, "region_name") or None
-                description = value(row, "description") or None
-
-                yielded += 1
-                yield CanonicalRecord(
+                record = CanonicalRecord(
                     order_number=order_number,
                     ordered_at=ordered_at,
                     stock_code=stock_code,
                     quantity=quantity,
                     unit_price=unit_price,
-                    description=description,
-                    customer_identifier=customer_identifier,
-                    region_name=region_name,
+                    description=value(row, "description") or None,
+                    customer_identifier=value(row, "customer_identifier") or None,
+                    region_name=value(row, "region_name") or None,
                     # The dataset marks cancellations with a "C" prefix on the
                     # invoice number, alongside a negative quantity.
                     is_cancellation=order_number.upper().startswith("C"),
                 )
+
+                # The remaining rules are shared with every other source, so a
+                # posted batch and a CSV export are judged identically.
+                reason = normalisation.classify_record(record, self.non_product_codes)
+                if reason is not None:
+                    skip(reason)
+                    continue
+
+                yielded += 1
+                yield record
 
         logger.info(
             "online_retail_fetch_complete",

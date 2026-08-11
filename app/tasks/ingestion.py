@@ -58,3 +58,69 @@ def import_online_retail_task(self, path: str, tenant_id: str | None = None) -> 
         }
 
     return asyncio.run(_run())
+
+
+@celery_app.task(
+    bind=True,
+    name="app.tasks.ingestion.import_sql_source",
+    max_retries=1,
+    default_retry_delay=60,
+)
+def import_sql_source_task(
+    self, configuration: dict, tenant_id: str | None = None
+) -> dict:
+    """Import transaction lines straight out of a merchant's own database.
+
+    No adapter is written per merchant: the configuration carries the query and
+    the mapping from their column names onto the canonical fields.
+
+    Args:
+        configuration: `SQLSourceConfiguration` fields, as a mapping.
+        tenant_id: Tenant to attribute the imported rows to, when scoping the
+            import to one store.
+
+    Returns:
+        Result dict with the import counters.
+
+    Raises:
+        ValueError: If the configuration is not a usable source definition,
+            for example a mapping missing a required canonical field.
+    """
+    import asyncio
+
+    from pydantic import ValidationError
+
+    from app.core.tenant import set_current_tenant_id
+    from app.database import async_session_factory
+    from app.ingestion.sql_source import SQLDataSourceAdapter
+    from app.ingestion.sql_source import SQLSourceConfiguration
+    from app.services.ingestion_service import IngestionService
+
+    try:
+        source = SQLSourceConfiguration(**configuration)
+    except ValidationError as error:
+        message = f"Invalid SQL source configuration: {error}"
+        raise ValueError(message) from error
+
+    async def _run() -> dict:
+        if tenant_id is not None:
+            from uuid import UUID
+
+            set_current_tenant_id(UUID(tenant_id))
+
+        async with async_session_factory() as session:
+            service = IngestionService(session)
+            summary = await service.import_from(SQLDataSourceAdapter(source))
+
+        return {
+            "status": "completed",
+            "orders_created": summary.orders_created,
+            "order_items_created": summary.order_items_created,
+            "returns_created": summary.returns_created,
+            "transactions_skipped": summary.transactions_skipped,
+            "customers_created": summary.customers_created,
+            "products_created": summary.products_created,
+            "regions_created": summary.regions_created,
+        }
+
+    return asyncio.run(_run())
