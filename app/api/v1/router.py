@@ -13,6 +13,7 @@ from app.api.v1.feature_flags import router as feature_flags_router
 from app.api.v1.files import router as files_router
 from app.api.v1.health import router as health_router
 from app.api.v1.market_basket import router as market_basket_router
+from app.api.v1.segmentation import router as segmentation_router
 from app.api.v1.tenants import router as tenants_router
 from app.api.v1.users import router as users_router
 from app.api.v1.websocket import router as websocket_router
@@ -29,4 +30,5 @@ router.include_router(feature_flags_router)
 router.include_router(analytics_router)
 router.include_router(business_metrics_router)
 router.include_router(market_basket_router)
+router.include_router(segmentation_router)
 router.include_router(websocket_router)
