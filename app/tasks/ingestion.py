@@ -32,7 +32,7 @@ def import_online_retail_task(self, path: str, tenant_id: str | None = None) -> 
     import asyncio
 
     from app.core.tenant import set_current_tenant_id
-    from app.database import async_session_factory
+    from app.database import celery_session_factory
     from app.ingestion.online_retail import OnlineRetailCSVAdapter
     from app.services.ingestion_service import IngestionService
 
@@ -42,7 +42,7 @@ def import_online_retail_task(self, path: str, tenant_id: str | None = None) -> 
 
             set_current_tenant_id(UUID(tenant_id))
 
-        async with async_session_factory() as session:
+        async with celery_session_factory() as session:
             service = IngestionService(session)
             summary = await service.import_from(OnlineRetailCSVAdapter(path))
 
@@ -91,7 +91,7 @@ def import_sql_source_task(
     from pydantic import ValidationError
 
     from app.core.tenant import set_current_tenant_id
-    from app.database import async_session_factory
+    from app.database import celery_session_factory
     from app.ingestion.sql_source import SQLDataSourceAdapter
     from app.ingestion.sql_source import SQLSourceConfiguration
     from app.services.ingestion_service import IngestionService
@@ -108,7 +108,7 @@ def import_sql_source_task(
 
             set_current_tenant_id(UUID(tenant_id))
 
-        async with async_session_factory() as session:
+        async with celery_session_factory() as session:
             service = IngestionService(session)
             summary = await service.import_from(SQLDataSourceAdapter(source))
 
