@@ -40,6 +40,41 @@ _COLUMN_ALIASES: dict[str, tuple[str, ...]] = {
     "region_name": ("country",),
 }
 
+# Stock codes that are not products.
+#
+# The dataset records postage, manual adjustments, fees, samples, discounts and
+# at least one test row through the same line format as real merchandise. Left
+# in, they dominate the results: "Manual" and "DOTCOM POSTAGE" rank first and
+# third by revenue, and "Manual" alone accounts for more refunded value than
+# any genuine product.
+#
+# They cannot be filtered by pattern. Some are numeric-looking and some real
+# products carry alphabetic codes (the DCGS range is genuine merchandise), so
+# the list is explicit. Gift vouchers are excluded too: they are a payment
+# instrument, and counting both the voucher and the goods it buys is double
+# counting.
+#
+# Pass `non_product_codes` to override this for a different merchant.
+NON_PRODUCT_STOCK_CODES = frozenset(
+    {
+        "ADJUST",
+        "ADJUST2",
+        "AMAZONFEE",
+        "B",
+        "BANK CHARGES",
+        "C2",
+        "CRUK",
+        "D",
+        "DOT",
+        "M",
+        "PADS",
+        "POST",
+        "S",
+        "TEST001",
+        "TEST002",
+    }
+)
+
 _REQUIRED_FIELDS = (
     "order_number",
     "stock_code",
@@ -135,15 +170,26 @@ class OnlineRetailCSVAdapter(DataSourceAdapter):
         encoding: File encoding, the published exports are Latin-1
     """
 
-    def __init__(self, path: Path | str, encoding: str = "latin-1") -> None:
+    def __init__(
+        self,
+        path: Path | str,
+        encoding: str = "latin-1",
+        non_product_codes: frozenset[str] | None = None,
+    ) -> None:
         """Initialise the adapter.
 
         Args:
             path: Location of the CSV file to read.
             encoding: File encoding, defaults to the published exports' Latin-1.
+            non_product_codes: Stock codes to treat as administrative rather
+                than merchandise. Defaults to `NON_PRODUCT_STOCK_CODES`; pass
+                an empty set to keep everything.
         """
         self.path = Path(path)
         self.encoding = encoding
+        self.non_product_codes = (
+            NON_PRODUCT_STOCK_CODES if non_product_codes is None else non_product_codes
+        )
 
     def _resolve_columns(self, header: list[str]) -> dict[str, str]:
         """Map canonical field names onto this file's actual column names.
@@ -215,6 +261,15 @@ class OnlineRetailCSVAdapter(DataSourceAdapter):
                 stock_code = value(row, "stock_code")
                 if not order_number or not stock_code:
                     skip("missing_identifier")
+                    continue
+
+                # Postage, fees, adjustments and the like are not merchandise
+                # and would otherwise top every ranking.
+                normalised_code = stock_code.upper()
+                if normalised_code in self.non_product_codes or (
+                    normalised_code.startswith("GIFT_")
+                ):
+                    skip("non_product_code")
                     continue
 
                 ordered_at = _parse_datetime(value(row, "ordered_at"))
