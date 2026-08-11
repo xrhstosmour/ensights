@@ -49,43 +49,80 @@ print(f"observations: {len(series)}")
 print(series.round(2).to_string())
 
 # %% [markdown]
+# ## The final period may be truncated
+#
+# Exports of this kind frequently end mid-month, which leaves the last
+# observation artificially low. Fitted as if it were a real decline, it drags
+# the model down and lands inside the holdout window, so it corrupts the
+# accuracy figures as well as the forecast.
+#
+# The check is explicit rather than assumed: the final value is compared
+# against the three before it, and only a value far below them is treated as
+# truncated.
+
+# %%
+TRUNCATION_RATIO = 0.6
+
+tail_ratio = float(series.iloc[-1] / series.iloc[-4:-1].mean())
+truncated = tail_ratio < TRUNCATION_RATIO
+print(f"final period against the previous three: {tail_ratio:.2f}")
+print(f"treated as truncated: {truncated}")
+
+fitted = series.iloc[:-1] if truncated else series
+fitted_values = [float(value) for value in fitted.to_numpy()]
+
+# %% [markdown]
 # ## Comparing methods on the same holdout
 #
 # Both are fitted only on the data before the holdout, so the errors describe
-# points the model never saw.
+# points the model never saw. Each method is measured twice, once on the full
+# series and once with the truncated period removed, because the exclusion is
+# what decides whether the model beats its baseline at all.
 
 # %%
 rows = []
-for method in (NAIVE, EXPONENTIAL_SMOOTHING):
-    result = forecast(values, horizon=HORIZON, method=method, seasonal_periods=12)
-    summary = summarise(result)
-    metrics = summary["metrics"] or {}
-    rows.append({
-        "method": method,
-        "MAE": metrics.get("mean_absolute_error"),
-        "RMSE": metrics.get("root_mean_squared_error"),
-        "MAPE": metrics.get("mean_absolute_percentage_error"),
-        "skill_score": summary["skill_score"],
-    })
+for label, sample in (("full series", values), ("truncated excluded", fitted_values)):
+    for method in (NAIVE, EXPONENTIAL_SMOOTHING):
+        result = forecast(sample, horizon=HORIZON, method=method, seasonal_periods=12)
+        summary = summarise(result)
+        metrics = summary["metrics"] or {}
+        rows.append({
+            "series": label,
+            "method": method,
+            "MAE": metrics.get("mean_absolute_error"),
+            "RMSE": metrics.get("root_mean_squared_error"),
+            "MAPE": metrics.get("mean_absolute_percentage_error"),
+            "skill_score": summary["skill_score"],
+        })
 
 comparison = pd.DataFrame(rows)
 print(comparison.to_string(index=False))
 
 # %% [markdown]
 # A positive skill score means the model beat the naive baseline. A negative
-# one means it did worse, and is reported as such rather than hidden.
+# one means it did worse, and is reported as such rather than hidden. Compare
+# the two blocks above: the sign of the conclusion turns on the truncated
+# period alone.
 
 # %%
-result = forecast(values, horizon=HORIZON, method=EXPONENTIAL_SMOOTHING,
+result = forecast(fitted_values, horizon=HORIZON, method=EXPONENTIAL_SMOOTHING,
                   seasonal_periods=12)
 
-future_index = pd.date_range(series.index[-1], periods=HORIZON + 1, freq="MS")[1:]
+future_index = pd.date_range(fitted.index[-1], periods=HORIZON + 1, freq="MS")[1:]
 projection = pd.Series(result.forecast, index=future_index)
 
 figure, axes = plt.subplots(figsize=(11, 4))
-axes.plot(series.index, series.values, marker="o", label="Ιστορικό")
+axes.plot(fitted.index, fitted.values, marker="o", label="Ιστορικό")
 axes.plot(projection.index, projection.values, marker="o", linestyle="--",
           label="Πρόβλεψη")
+
+# The excluded point is drawn rather than dropped: hiding it would leave the
+# reader unable to see what the exclusion did.
+if truncated:
+    axes.plot(series.index[-1:], series.values[-1:], marker="o", linestyle="none",
+              markerfacecolor="none", markeredgecolor="tab:red",
+              label="Ημιτελής περίοδος, εκτός προσαρμογής")
+
 axes.set_ylabel("Καθαρή αξία πωλήσεων")
 axes.set_title("Πρόβλεψη μηνιαίων πωλήσεων")
 axes.legend()
@@ -95,18 +132,3 @@ figure.savefig(FIGURES / "revenue_forecast.pdf")
 
 print("\nforecast:")
 print(projection.round(2).to_string())
-
-# %% [markdown]
-# ## A caution on the final period
-#
-# Datasets of this kind frequently end mid-month, leaving the last observation
-# artificially low. If the final point sits far below its neighbours, treat it
-# as truncated rather than as a decline, and consider excluding it before
-# fitting.
-
-# %%
-if len(series) >= 3:
-    tail_ratio = series.iloc[-1] / series.iloc[-4:-1].mean()
-    print(f"final period against the previous three: {tail_ratio:.2f}")
-    if tail_ratio < 0.6:
-        print("The final period looks truncated rather than genuinely weak.")
