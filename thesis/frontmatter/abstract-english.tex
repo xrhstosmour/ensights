@@ -19,9 +19,10 @@ baseline.
 The analysis extends to economic indicators, decomposing revenue change into
 six flows and measuring how concentrated that revenue is across customers.
 
-The architecture separates ingestion from analysis through source adapters, so
-that attaching a new store requires writing a single adapter and no change to
-any analytical code.
+The architecture separates ingestion from analysis through a published data
+contract. A store is attached by sending its transactions in that form or by
+granting read access to its own database, so onboarding is configuration
+rather than code, and no analytical code changes.
 
 A central methodological choice is the separation of measured from assumed
 quantities. Because the data contains neither cost of goods nor marketing
