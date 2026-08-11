@@ -46,7 +46,7 @@ def mine_market_baskets_task(
     from datetime import datetime
 
     from app.core.tenant import set_current_tenant_id
-    from app.database import async_session_factory
+    from app.database import celery_session_factory
     from app.services.market_basket_service import MarketBasketService
 
     async def _run() -> dict:
@@ -55,7 +55,7 @@ def mine_market_baskets_task(
 
             set_current_tenant_id(UUID(tenant_id))
 
-        async with async_session_factory() as session:
+        async with celery_session_factory() as session:
             service = MarketBasketService(session)
             run_identifier, result = await service.run(
                 algorithm=algorithm,
