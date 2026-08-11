@@ -101,8 +101,19 @@ measurement anywhere.
 
 Analytics never read a vendor-specific schema. Ingestion goes through a
 `DataSourceAdapter` into a canonical model (`Customer`, `Product`, `Region`,
-`Order`, `OrderItem`, `Return`), all tenant-scoped. Pointing this at another
-store means writing one adapter, not touching the ML code.
+`Order`, `OrderItem`, `Return`), all tenant-scoped.
+
+That canonical line is published as a data contract, documented in
+[ingestion-contract.md](ingestion-contract.md), with three delivery routes:
+
+| Route | Who moves the data | Needs code |
+| --- | --- | --- |
+| File export | The merchant exports, the system reads | Yes, one adapter per layout |
+| `POST /api/v1/ingestion/transactions` | The merchant pushes | No |
+| Read of the merchant's own database | The system pulls, given a query and a column mapping | No |
+
+Validity rules live once, in `app/ingestion/normalisation.py`, so no route can
+accept what another rejects.
 
 ## Delivery
 
@@ -127,6 +138,18 @@ Small PRs, each independently green. Sequence:
 
 Chapters are drafted alongside the PR that produces their results, not batched
 at the end.
+
+The fourteen are delivered. Since then:
+
+| Deliverable | Thesis chapter |
+| --- | --- |
+| Results written from the full dataset, every `TODO` removed | 3-7 |
+| Posted-batch and database ingestion routes, shared validity rules | 3 |
+| Appendices: code excerpts and the full sensitivity grid | Α, Β |
+| All eighteen figures, generated from the imported dataset | 4-7 |
+
+What remains needs the user, not code: `\thesismonth` in
+`thesis/metadata.tex`, and confirmation of who signs as head of department.
 
 ## Rules
 
