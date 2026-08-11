@@ -112,6 +112,14 @@ You need:
 # Full automated setup including environment variables, containerization, and initial data.
 ./scripts/setup.sh
 
+# One-command demo: starts every service, applies migrations, seeds data,
+# prints API/Metabase URLs and the demo login, then runs the API server.
+./scripts/demo.sh
+
+# Build the thesis PDF and copy it to dist/<author>.pdf.
+./scripts/export-thesis.sh            # requires local XeLaTeX + biber
+./scripts/export-thesis.sh --docker   # build inside the TeX Live container instead
+
 # Synchronize with upstream YAP template changes.
 ./scripts/synchronize.sh
 
