@@ -10,13 +10,20 @@
 % ΔΙΠΛΩΜΑΤΙΚΗ ΕΡΓΑΣΙΑ for a postgraduate one.
 \newcommand{\thesistype}{ΔΙΠΛΩΜΑΤΙΚΗ ΕΡΓΑΣΙΑ}
 
-% Titles.
+% Titles. The Greek one is the title as registered on the department's
+% declaration form, character for character.
 \newcommand{\thesistitle}{%
-  ΕΞΑΓΩΓΗ ΕΥΦΥΩΝ ΑΝΑΛΥΣΕΩΝ ΠΑΝΩ ΑΠΟ ΕΠΙΧΕΙΡΗΜΑΤΙΚΑ ΔΕΔΟΜΕΝΑ%
+  ΕΞΑΓΩΓΗ ΕΥΦΥΩΝ ΑΝΑΛΥΣΕΩΝ ΑΠΟ ΔΕΔΟΜΕΝΑ ΗΛΕΚΤΡΟΝΙΚΟΥ ΕΜΠΟΡΙΟΥ%
 }
 \newcommand{\thesistitleenglish}{%
-  EXTRACTION OF INTELLIGENT ANALYTICS OVER BUSINESS DATA%
+  EXTRACTION OF INTELLIGENT ANALYTICS FROM E-COMMERCE DATA%
 }
+
+% Ranks stay recorded below but are not printed: the department's
+% declaration form asks for names alone. Switching this to
+% \thesisshowrankstrue prints them everywhere they appear.
+\newif\ifthesisshowranks
+\thesisshowranksfalse
 
 % People.
 \newcommand{\thesisauthor}{Χρήστος Μουρτογιάννης}
@@ -39,8 +46,11 @@
   Τηλεπικοινωνιών, ΕΚΠΑ%
 }
 
-\newcommand{\thesisheadofdepartment}{Όνομα Επίθετο}
-\newcommand{\thesisheadofdepartmentrank}{τίτλος, βαθμίδα}
+% Needs confirming before submission: who signs as head of department.
+\newcommand{\thesisheadofdepartment}{Ευστάθιος Χατζηευθυμιάδης}
+\newcommand{\thesisheadofdepartmentrank}{%
+  Καθηγητής Τμήματος Πληροφορικής και Τηλεπικοινωνιών, ΕΚΠΑ%
+}
 
 % Place and date.
 \newcommand{\thesisplace}{Αθήνα}
