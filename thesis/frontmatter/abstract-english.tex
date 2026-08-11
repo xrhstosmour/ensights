@@ -2,7 +2,32 @@
 
 \begin{english}
 
-% TODO(PR13): Up to 300 words, the English rendering of the Greek abstract.
+Electronic commerce businesses record a complete transaction history, yet that
+record is rarely used to support marketing and sales decisions. This thesis
+designs and implements a system that extracts intelligent analytics from such
+data using data mining and machine learning techniques.
+
+The system answers seven questions raised by actual online retail clients and
+applies three families of techniques: frequent itemset mining with the Apriori
+and FP-Growth algorithms to surface product associations, two-level clustering
+that first groups by region and time and then re-clusters the customers within
+each group by RFM features, and time series forecasting with exponential
+smoothing. The number of clusters is selected by silhouette score rather than
+fixed in advance, and every forecast is evaluated out of sample against a naive
+baseline.
+
+The analysis extends to economic indicators, decomposing revenue change into
+six flows and measuring how concentrated that revenue is across customers.
+
+The architecture separates ingestion from analysis through source adapters, so
+that attaching a new store requires writing a single adapter and no change to
+any analytical code.
+
+A central methodological choice is the separation of measured from assumed
+quantities. Because the data contains neither cost of goods nor marketing
+spend, profitability is not computed as a measurement but as a sensitivity
+analysis over explicitly stated assumptions, isolated from the measured metrics
+at every level of the system.
 
 \vspace{1cm}
 
