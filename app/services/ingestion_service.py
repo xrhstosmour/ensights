@@ -13,6 +13,13 @@ from typing import TYPE_CHECKING
 from uuid import UUID
 
 from app.core.logging import get_logger
+from app.core.tenant import get_current_tenant_id
+from app.models.customer import Customer
+from app.models.order import Order
+from app.models.order_item import OrderItem
+from app.models.product import Product
+from app.models.product_return import ProductReturn
+from app.models.region import Region
 from app.repositories.commerce_repository import CustomerRepository
 from app.repositories.commerce_repository import OrderItemRepository
 from app.repositories.commerce_repository import OrderRepository
@@ -29,6 +36,12 @@ if TYPE_CHECKING:
     from app.ingestion.base import DataSourceAdapter
 
 logger = get_logger("service.ingestion")
+
+# Transactions are committed in batches rather than all at once. A full retail
+# history runs to seven figures of rows: committing once at the end would hold
+# every object in the session, and lose the entire run to a single late
+# failure.
+DEFAULT_BATCH_SIZE = 2000
 
 
 @dataclass
@@ -73,6 +86,7 @@ class IngestionService:
             session: Async database session.
         """
         self.session = session
+        self.tenant_id = get_current_tenant_id()
         self.region_repository = RegionRepository(session)
         self.customer_repository = CustomerRepository(session)
         self.product_repository = ProductRepository(session)
@@ -80,7 +94,11 @@ class IngestionService:
         self.order_item_repository = OrderItemRepository(session)
         self.return_repository = ProductReturnRepository(session)
 
-    async def import_from(self, adapter: DataSourceAdapter) -> ImportSummary:
+    async def import_from(
+        self,
+        adapter: DataSourceAdapter,
+        batch_size: int = DEFAULT_BATCH_SIZE,
+    ) -> ImportSummary:
         """Import every record the adapter yields.
 
         Records are grouped by transaction, and a transaction already present
@@ -89,15 +107,27 @@ class IngestionService:
 
         Args:
             adapter: Source to read from.
+            batch_size: Transactions to accumulate before committing.
 
         Returns:
             Counts describing what the run created and skipped.
         """
         summary = ImportSummary()
         caches = _Caches()
+        pending = 0
 
         for transaction in _group_by_transaction(adapter.fetch()):
             await self._import_transaction(transaction, caches, summary)
+            pending += 1
+            if pending >= batch_size:
+                await self.session.commit()
+                pending = 0
+                logger.info(
+                    "import_progress",
+                    orders_created=summary.orders_created,
+                    order_items_created=summary.order_items_created,
+                    returns_created=summary.returns_created,
+                )
 
         await self.session.commit()
 
@@ -153,6 +183,8 @@ class IngestionService:
         else:
             await self._create_order(records, region_id, customer_id, caches, summary)
 
+        await self.session.flush()
+
     async def _create_order(
         self,
         records: list[CanonicalRecord],
@@ -171,15 +203,20 @@ class IngestionService:
             summary: Counters to update in place.
         """
         first = records[0]
-        order = await self.order_repository.create(
-            {
-                "order_number": first.order_number,
-                "ordered_at": first.ordered_at,
-                "customer_id": customer_id,
-                "region_id": region_id,
-                "is_cancelled": False,
-            }
+        # Constructed rather than created through the repository: the
+        # repository flushes and refreshes on every row, which is two round
+        # trips per record and unusable at a million of them. The primary key
+        # is generated client-side by uuid7(), so the order's id is available
+        # to its lines without a flush.
+        order = Order(
+            tenant_id=self.tenant_id,
+            order_number=first.order_number,
+            ordered_at=first.ordered_at,
+            customer_id=customer_id,
+            region_id=region_id,
+            is_cancelled=False,
         )
+        self.session.add(order)
         summary.orders_created += 1
 
         for record in records:
@@ -188,29 +225,31 @@ class IngestionService:
             # revenue and refunds stay separately countable.
             product_id = await self._resolve_product(record, caches, summary)
             if record.quantity < 0:
-                await self.return_repository.create(
-                    {
-                        "product_id": product_id,
-                        "customer_id": customer_id,
-                        "region_id": region_id,
-                        "original_order_id": order.id,
-                        "return_order_number": record.order_number,
-                        "quantity": abs(record.quantity),
-                        "amount": abs(record.line_total),
-                        "returned_at": record.ordered_at,
-                    }
+                self.session.add(
+                    ProductReturn(
+                        tenant_id=self.tenant_id,
+                        product_id=product_id,
+                        customer_id=customer_id,
+                        region_id=region_id,
+                        original_order_id=order.id,
+                        return_order_number=record.order_number,
+                        quantity=abs(record.quantity),
+                        amount=abs(record.line_total),
+                        returned_at=record.ordered_at,
+                    )
                 )
                 summary.returns_created += 1
                 continue
 
-            await self.order_item_repository.create(
-                {
-                    "order_id": order.id,
-                    "product_id": product_id,
-                    "quantity": record.quantity,
-                    "unit_price": record.unit_price,
-                    "line_total": record.line_total,
-                }
+            self.session.add(
+                OrderItem(
+                    tenant_id=self.tenant_id,
+                    order_id=order.id,
+                    product_id=product_id,
+                    quantity=record.quantity,
+                    unit_price=record.unit_price,
+                    line_total=record.line_total,
+                )
             )
             summary.order_items_created += 1
 
@@ -233,19 +272,20 @@ class IngestionService:
         """
         for record in records:
             product_id = await self._resolve_product(record, caches, summary)
-            await self.return_repository.create(
-                {
-                    "product_id": product_id,
-                    "customer_id": customer_id,
-                    "region_id": region_id,
+            self.session.add(
+                ProductReturn(
+                    tenant_id=self.tenant_id,
+                    product_id=product_id,
+                    customer_id=customer_id,
+                    region_id=region_id,
                     # The dataset does not reliably link a cancellation back to
                     # the sale it reverses, so this stays unset.
-                    "original_order_id": None,
-                    "return_order_number": record.order_number,
-                    "quantity": abs(record.quantity),
-                    "amount": abs(record.line_total),
-                    "returned_at": record.ordered_at,
-                }
+                    original_order_id=None,
+                    return_order_number=record.order_number,
+                    quantity=abs(record.quantity),
+                    amount=abs(record.line_total),
+                    returned_at=record.ordered_at,
+                )
             )
             summary.returns_created += 1
 
@@ -272,7 +312,9 @@ class IngestionService:
 
         region = await self.region_repository.get_by_name(name)
         if region is None:
-            region = await self.region_repository.create({"name": name})
+            region = Region(tenant_id=self.tenant_id, name=name)
+            self.session.add(region)
+            await self.session.flush()
             summary.regions_created += 1
 
         caches.regions[name] = region.id
@@ -303,9 +345,13 @@ class IngestionService:
 
         customer = await self.customer_repository.get_by_external_identifier(identifier)
         if customer is None:
-            customer = await self.customer_repository.create(
-                {"external_identifier": identifier, "region_id": region_id}
+            customer = Customer(
+                tenant_id=self.tenant_id,
+                external_identifier=identifier,
+                region_id=region_id,
             )
+            self.session.add(customer)
+            await self.session.flush()
             summary.customers_created += 1
 
         caches.customers[identifier] = customer.id
@@ -332,13 +378,14 @@ class IngestionService:
 
         product = await self.product_repository.get_by_stock_code(record.stock_code)
         if product is None:
-            product = await self.product_repository.create(
-                {
-                    "stock_code": record.stock_code,
-                    "description": record.description,
-                    "last_unit_price": record.unit_price,
-                }
+            product = Product(
+                tenant_id=self.tenant_id,
+                stock_code=record.stock_code,
+                description=record.description,
+                last_unit_price=record.unit_price,
             )
+            self.session.add(product)
+            await self.session.flush()
             summary.products_created += 1
 
         caches.products[record.stock_code] = product.id
