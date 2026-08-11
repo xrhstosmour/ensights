@@ -5,6 +5,7 @@ This module combines all v1 API endpoints into a single router.
 
 from fastapi import APIRouter
 
+from app.api.v1.analytics import router as analytics_router
 from app.api.v1.api_keys import router as api_keys_router
 from app.api.v1.auth import router as auth_router
 from app.api.v1.feature_flags import router as feature_flags_router
@@ -23,4 +24,5 @@ router.include_router(files_router)
 router.include_router(tenants_router)
 router.include_router(health_router)
 router.include_router(feature_flags_router)
+router.include_router(analytics_router)
 router.include_router(websocket_router)
