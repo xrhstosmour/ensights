@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 
+from app.ingestion.normalisation import parse_bool
 from app.ingestion.normalisation import parse_decimal
 from app.ingestion.normalisation import parse_int
 
@@ -83,3 +84,36 @@ class TestParseInt:
     def test_blank_returns_none(self) -> None:
         """An empty value returns None."""
         assert parse_int("") is None
+
+
+class TestParseBool:
+    """Tests for parse_bool()."""
+
+    def test_falsy_text_is_false(self) -> None:
+        """A "N"/"false"-shaped value must not be Python-truthy-True."""
+        assert parse_bool("N") is False
+        assert parse_bool("n") is False
+        assert parse_bool("false") is False
+        assert parse_bool("0") is False
+        assert parse_bool("no") is False
+
+    def test_truthy_text_is_true(self) -> None:
+        """Common truthy representations are recognized."""
+        assert parse_bool("Y") is True
+        assert parse_bool("y") is True
+        assert parse_bool("true") is True
+        assert parse_bool("1") is True
+        assert parse_bool("yes") is True
+
+    def test_none_is_false(self) -> None:
+        """A missing column value means "not flagged"."""
+        assert parse_bool(None) is False
+
+    def test_native_bool_passes_through(self) -> None:
+        """A native bool value is returned as-is."""
+        assert parse_bool(True) is True
+        assert parse_bool(False) is False
+
+    def test_unrecognized_text_is_false(self) -> None:
+        """Unrecognized text defaults to False rather than guessing True."""
+        assert parse_bool("maybe") is False

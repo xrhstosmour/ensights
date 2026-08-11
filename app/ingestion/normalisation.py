@@ -143,6 +143,34 @@ def parse_int(raw: object) -> int | None:
         return None
 
 
+_TRUTHY_TEXT: Final[frozenset[str]] = frozenset({"1", "true", "yes", "y", "t"})
+
+
+def parse_bool(raw: object) -> bool:
+    """Parse a source flag column (e.g. a cancellation indicator).
+
+    Recognizes common textual representations ("Y"/"N", "true"/"false",
+    "1"/"0") in addition to native booleans, instead of Python's generic
+    truthiness, which treats any non-empty string, including "N" or
+    "false", as True.
+
+    Args:
+        raw: Flag value from the source.
+
+    Returns:
+        The parsed boolean. Unrecognized text and None are treated as
+        False, absence or uncertainty means "not flagged".
+    """
+    if isinstance(raw, bool):
+        return raw
+    if raw is None:
+        return False
+    if isinstance(raw, int | float):
+        return bool(raw)
+
+    return str(raw).strip().lower() in _TRUTHY_TEXT
+
+
 def parse_text(raw: object) -> str | None:
     """Normalise an optional free-text field.
 
