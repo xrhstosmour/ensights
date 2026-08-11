@@ -14,6 +14,8 @@ from uuid import UUID
 
 from app.core.logging import get_logger
 from app.core.tenant import get_current_tenant_id
+from app.ingestion.normalisation import classify_record
+from app.ingestion.records import RecordSequenceAdapter
 from app.models.customer import Customer
 from app.models.order import Order
 from app.models.order_item import OrderItem
@@ -29,6 +31,7 @@ from app.repositories.commerce_repository import RegionRepository
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
+    from collections.abc import Sequence
 
     from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -65,6 +68,45 @@ class ImportSummary:
     customers_created: int = 0
     products_created: int = 0
     regions_created: int = 0
+
+
+@dataclass(frozen=True, slots=True)
+class RejectedRecord:
+    """One submitted line that the shared rules turned away.
+
+    Attributes:
+        index: Position of the line in the submitted batch
+        order_number: Transaction identifier of the line
+        reason: Why the line cannot support analysis
+    """
+
+    index: int
+    order_number: str
+    reason: str
+
+
+@dataclass
+class BatchImportResult:
+    """Outcome of importing a batch supplied in canonical form.
+
+    Attributes:
+        summary: What the run created and skipped
+        records_received: Lines submitted, accepted and rejected together
+        rejected: Lines that could not be imported
+    """
+
+    summary: ImportSummary
+    records_received: int = 0
+    rejected: list[RejectedRecord] = field(default_factory=list)
+
+    @property
+    def records_accepted(self) -> int:
+        """Lines that passed the rules.
+
+        Returns:
+            Received lines minus rejected ones.
+        """
+        return self.records_received - len(self.rejected)
 
 
 @dataclass
@@ -140,6 +182,57 @@ class IngestionService:
             transactions_skipped=summary.transactions_skipped,
         )
         return summary
+
+    async def import_batch(
+        self,
+        records: Sequence[CanonicalRecord],
+        source_name: str = "posted-batch",
+        non_product_codes: frozenset[str] = frozenset(),
+    ) -> BatchImportResult:
+        """Import lines a caller supplied already in canonical form.
+
+        The lines are held to the same rules as any other source, and the ones
+        that fail are reported back per line rather than dropped silently: a
+        caller who sends a batch is entitled to know exactly which lines did
+        not survive it.
+
+        Args:
+            records: Lines to import, in canonical form.
+            source_name: Where the batch came from, recorded for provenance.
+            non_product_codes: Stock codes to treat as administrative rather
+                than merchandise.
+
+        Returns:
+            The import counters alongside the rejected lines.
+        """
+        accepted: list[CanonicalRecord] = []
+        rejected: list[RejectedRecord] = []
+
+        for index, record in enumerate(records):
+            reason = classify_record(record, non_product_codes)
+            if reason is None:
+                accepted.append(record)
+            else:
+                rejected.append(
+                    RejectedRecord(
+                        index=index, order_number=record.order_number, reason=reason
+                    )
+                )
+
+        summary = await self.import_from(RecordSequenceAdapter(accepted, source_name))
+
+        logger.info(
+            "batch_import_complete",
+            source=source_name,
+            received=len(records),
+            accepted=len(accepted),
+            rejected=len(rejected),
+        )
+        return BatchImportResult(
+            summary=summary,
+            records_received=len(records),
+            rejected=rejected,
+        )
 
     async def _import_transaction(
         self,
