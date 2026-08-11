@@ -33,5 +33,6 @@ module = [
     "phonenumbers.*",
     "mlxtend.*",
     "pandas.*",
+    "sklearn.*",
 ]
 ignore_missing_imports = true
