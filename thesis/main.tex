@@ -1,5 +1,5 @@
-% Διπλωματική εργασία. Απαιτεί XeLaTeX (ή LuaLaTeX) και biber.
-% Μεταγλώττιση: make, ή latexmk -xelatex main.tex
+% Master's thesis. Requires XeLaTeX (or LuaLaTeX) and biber.
+% Build with `make`, or `latexmk -xelatex main.tex`.
 \documentclass[12pt,a4paper,oneside]{report}
 
 \input{preamble/packages}
@@ -10,7 +10,7 @@
 
 \begin{document}
 
-% Το εξώφυλλο και η σελίδα τίτλου δεν αριθμούνται.
+% The cover and the title page carry no page number.
 \pagenumbering{gobble}
 \input{frontmatter/cover}
 \input{frontmatter/titlepage}

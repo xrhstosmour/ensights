@@ -6,7 +6,7 @@ reality.
 
 ## Subject
 
-Master's thesis, "Εξαγωγή Ευφυών Αναλύσεων πάνω από Επιχειρηματικά Δεδομένα"
+Master's thesis, "Εξαγωγή Ευφυών Αναλύσεων από Δεδομένα Ηλεκτρονικού Εμπορίου"
 (Extraction of Intelligent Analytics over Business Data).
 
 Extract predictions and statistics that drive the marketing and sales decisions
