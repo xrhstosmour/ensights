@@ -60,6 +60,14 @@
 \label{tab:forecast-accuracy}
 \end{table}
 
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{revenue_forecast}
+\caption{Καθαρή αξία πωλήσεων ανά μήνα και πρόβλεψη τριών μηνών. Ο ημιτελής Δεκέμβριος του 2011 σημειώνεται χωριστά και εξαιρείται από την προσαρμογή}
+\label{fig:revenue-forecast}
+\end{figure}
+
 Το εύρημα είναι μεθοδολογικά σημαντικότερο από τους ίδιους τους αριθμούς: η μη
 αναγνώριση μιας αποκομμένης περιόδου δεν υποβαθμίζει απλώς την ακρίβεια, αλλά
 αντιστρέφει το πρόσημο του συμπεράσματος για το αν το μοντέλο αξίζει καθόλου.
@@ -103,6 +111,14 @@
 του σχήματος δεδομένων, όπου οι επιστροφές αποτελούν αυτοτελείς εγγραφές και
 δεν αφαιρούνται σιωπηρά από τα έσοδα.
 
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{gross_merchandise_value}
+\caption{Ακαθάριστη αξία πωλήσεων, αξία επιστροφών και καθαρή αξία ανά μήνα}
+\label{fig:gmv}
+\end{figure}
+
 \subsection{Ποσοστό επαναληπτικών αγορών}
 
 Στα δεδομένα, το ποσοστό επαναληπτικών αγορών ανέρχεται σε 72,4\%, με 4.234
@@ -125,6 +141,14 @@
 τριγωνικό, καθώς οι νεότερες κοόρτες διαθέτουν λιγότερους μήνες
 παρακολούθησης.
 
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{cohort_retention}
+\caption{Διατήρηση πελατών ανά κοόρτη πρώτης αγοράς. Το πλέγμα είναι εξ ορισμού τριγωνικό}
+\label{fig:cohort-retention}
+\end{figure}
+
 \subsection{Ανάλυση RFM}
 
 Για κάθε πελάτη υπολογίζονται η προσφατότητα (\textenglish{recency}), η
@@ -140,6 +164,14 @@
 στάδιο. Τα ίδια χαρακτηριστικά τροφοδοτούν τη συσταδοποίηση δεύτερου επιπέδου
 του κεφαλαίου~\ref{chap:clustering}, ακολουθώντας την προσέγγιση των
 \textcite{chen2012data}.
+
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{rfm_distributions}
+\caption{Κατανομές των τριών μεγεθών RFM στο σύνολο των πελατών}
+\label{fig:rfm-distributions}
+\end{figure}
 
 \section{Λογιστική ανάπτυξης και ποσοτική προσαρμογή προϊόντος-αγοράς}
 \label{sec:growth-accounting}
@@ -201,6 +233,21 @@ Product Market Fit}. Πρόκειται για πλαίσιο της επενδ�
   \item \textbf{Ακαθάριστη διατήρηση}: τα διατηρημένα έσοδα προς τα έσοδα της
         προηγούμενης περιόδου.
 \end{itemize}
+
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{growth_accounting}
+\caption{Αποσύνθεση της μεταβολής των εσόδων στις έξι ροές. Οι θετικές ροές σχεδιάζονται πάνω από τον άξονα και οι αρνητικές κάτω}
+\label{fig:growth-accounting}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{quick_ratio}
+\caption{Ταχύς λόγος ανά μήνα. Τιμή κάτω της μονάδας σημαίνει συρρίκνωση των συνολικών εσόδων}
+\label{fig:quick-ratio}
+\end{figure}
 
 \subsection{Συγκέντρωση εσόδων}
 
@@ -332,6 +379,14 @@ Gini εξεταζόμενος χωρίς το μερίδιο του μεγαλύ
 \caption{Ανάλυση ευαισθησίας των μοναδιαίων οικονομικών}
 \label{tab:sensitivity}
 \end{table}
+
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{profitability_sensitivity}
+\caption{Λόγος αξίας διάρκειας ζωής προς κόστος απόκτησης, για κάθε συνδυασμό παραδοχών. Το πλήρες πλέγμα παρατίθεται στο παράρτημα~\ref{app:results}}
+\label{fig:profitability-sensitivity}
+\end{figure}
 
 Από τα δεκαέξι κελιά του πλήρους πλέγματος, οκτώ πληρούν το σημείο αναφοράς
 3:1 και οκτώ όχι.
