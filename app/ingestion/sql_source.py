@@ -171,7 +171,7 @@ class SQLDataSourceAdapter(DataSourceAdapter):
             return normalisation.UNPARSEABLE_PRICE
 
         prefix = self.configuration.cancellation_prefix
-        flagged = bool(value("is_cancellation"))
+        flagged = normalisation.parse_bool(value("is_cancellation"))
         if prefix:
             flagged = flagged or order_number.upper().startswith(prefix.upper())
 
