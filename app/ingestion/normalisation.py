@@ -74,26 +74,44 @@ def parse_datetime(raw: object) -> datetime | None:
 def parse_decimal(raw: object) -> Decimal | None:
     """Parse a source money value.
 
+    A lone comma is treated as a decimal point when it is followed by one
+    or two trailing digits (`"4,50"`, the shape of a European money
+    value), and as thousands grouping otherwise (`"1,234"`, `"1,234,567"`).
+    A comma alongside a dot is always thousands grouping (`"1,234.56"`).
+
     Args:
         raw: Amount from the source, as a number or as text.
 
     Returns:
-        The parsed decimal, or None when the value is blank or malformed.
+        The parsed decimal, or None when the value is blank, malformed,
+        or not finite (NaN/Infinity).
     """
     if isinstance(raw, Decimal):
-        return raw
-    if raw is None:
+        value = raw
+    elif raw is None:
         return None
-    if isinstance(raw, int | float):
-        return Decimal(str(raw))
+    elif isinstance(raw, int | float):
+        value = Decimal(str(raw))
+    else:
+        text = str(raw).strip()
+        if not text:
+            return None
 
-    text = str(raw).strip().replace(",", "")
-    if not text:
-        return None
-    try:
-        return Decimal(text)
-    except InvalidOperation:
-        return None
+        if "," in text and "." in text:
+            text = text.replace(",", "")
+        elif "," in text:
+            head, _, tail = text.rpartition(",")
+            if tail.isdigit() and len(tail) in (1, 2) and "," not in head:
+                text = f"{head}.{tail}"
+            else:
+                text = text.replace(",", "")
+
+        try:
+            value = Decimal(text)
+        except InvalidOperation:
+            return None
+
+    return value if value.is_finite() else None
 
 
 def parse_int(raw: object) -> int | None:
@@ -103,7 +121,8 @@ def parse_int(raw: object) -> int | None:
         raw: Quantity from the source, as a number or as text.
 
     Returns:
-        The parsed integer, or None when the value is blank or malformed.
+        The parsed integer, or None when the value is blank, malformed,
+        or not finite (NaN/Infinity).
     """
     if isinstance(raw, bool):
         return None
@@ -116,8 +135,11 @@ def parse_int(raw: object) -> int | None:
     if not text:
         return None
     try:
-        return int(Decimal(text))
-    except (InvalidOperation, ValueError):
+        value = Decimal(text)
+        if not value.is_finite():
+            return None
+        return int(value)
+    except (InvalidOperation, ValueError, OverflowError):
         return None
 
 
