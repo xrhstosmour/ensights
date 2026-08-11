@@ -11,6 +11,7 @@ from app.api.v1.auth import router as auth_router
 from app.api.v1.business_metrics import router as business_metrics_router
 from app.api.v1.feature_flags import router as feature_flags_router
 from app.api.v1.files import router as files_router
+from app.api.v1.forecasting import router as forecasting_router
 from app.api.v1.health import router as health_router
 from app.api.v1.market_basket import router as market_basket_router
 from app.api.v1.segmentation import router as segmentation_router
@@ -31,4 +32,5 @@ router.include_router(analytics_router)
 router.include_router(business_metrics_router)
 router.include_router(market_basket_router)
 router.include_router(segmentation_router)
+router.include_router(forecasting_router)
 router.include_router(websocket_router)
