@@ -185,3 +185,103 @@ class TestOnlineRetailCSVAdapter:
             None.
         """
         assert OnlineRetailCSVAdapter(FIXTURE).source_name == "OnlineRetailCSVAdapter"
+
+
+class TestNonProductCodes:
+    """Tests for the administrative stock code filter."""
+
+    def test_administrative_codes_are_excluded(self, tmp_path: Path) -> None:
+        """Postage, fees and adjustments are not merchandise.
+
+        Args:
+            tmp_path: Temporary directory fixture.
+
+        Returns:
+            None.
+        """
+        source = tmp_path / "admin.csv"
+        source.write_text(
+            "Invoice,StockCode,Description,Quantity,InvoiceDate,Price\n"
+            "1,M,Manual,1,2010-12-01 08:00:00,100.00\n"
+            "1,DOT,DOTCOM POSTAGE,1,2010-12-01 08:00:00,50.00\n"
+            "1,POST,POSTAGE,1,2010-12-01 08:00:00,18.00\n"
+            "1,AMAZONFEE,AMAZON FEE,1,2010-12-01 08:00:00,90.00\n"
+            "1,BANK CHARGES,Bank Charges,1,2010-12-01 08:00:00,15.00\n"
+            "1,gift_0001_20,Gift Voucher,1,2010-12-01 08:00:00,20.00\n"
+            "1,85123A,WHITE HANGING HEART,6,2010-12-01 08:00:00,2.55\n",
+            encoding="utf-8",
+        )
+
+        records = list(OnlineRetailCSVAdapter(source, encoding="utf-8").fetch())
+
+        assert [record.stock_code for record in records] == ["85123A"]
+
+    def test_genuine_alphabetic_codes_survive(self, tmp_path: Path) -> None:
+        """The DCGS range is real merchandise despite its letters.
+
+        A pattern-based filter would wrongly discard these, which is why the
+        exclusion list is explicit rather than inferred.
+
+        Args:
+            tmp_path: Temporary directory fixture.
+
+        Returns:
+            None.
+        """
+        source = tmp_path / "dcgs.csv"
+        source.write_text(
+            "Invoice,StockCode,Description,Quantity,InvoiceDate,Price\n"
+            "1,DCGSSGIRL,GIRLS PARTY BAG,2,2010-12-01 08:00:00,3.36\n"
+            "1,DCGS0076,SUNJAR LED NIGHT LIGHT,1,2010-12-01 08:00:00,19.96\n",
+            encoding="utf-8",
+        )
+
+        records = list(OnlineRetailCSVAdapter(source, encoding="utf-8").fetch())
+
+        assert {record.stock_code for record in records} == {
+            "DCGSSGIRL",
+            "DCGS0076",
+        }
+
+    def test_exclusion_list_can_be_overridden(self, tmp_path: Path) -> None:
+        """A different merchant can supply its own codes, or none.
+
+        Args:
+            tmp_path: Temporary directory fixture.
+
+        Returns:
+            None.
+        """
+        source = tmp_path / "override.csv"
+        source.write_text(
+            "Invoice,StockCode,Description,Quantity,InvoiceDate,Price\n"
+            "1,M,Manual,1,2010-12-01 08:00:00,100.00\n",
+            encoding="utf-8",
+        )
+
+        kept = list(
+            OnlineRetailCSVAdapter(
+                source, encoding="utf-8", non_product_codes=frozenset()
+            ).fetch()
+        )
+
+        assert [record.stock_code for record in kept] == ["M"]
+
+    def test_matching_is_case_insensitive(self, tmp_path: Path) -> None:
+        """Codes appear in mixed case across the two sheets.
+
+        Args:
+            tmp_path: Temporary directory fixture.
+
+        Returns:
+            None.
+        """
+        source = tmp_path / "case.csv"
+        source.write_text(
+            "Invoice,StockCode,Description,Quantity,InvoiceDate,Price\n"
+            "1,m,Manual,1,2010-12-01 08:00:00,100.00\n"
+            "1,Post,POSTAGE,1,2010-12-01 08:00:00,18.00\n",
+            encoding="utf-8",
+        )
+
+        assert list(OnlineRetailCSVAdapter(source, encoding="utf-8").fetch()) == []
