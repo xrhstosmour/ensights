@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Generator
 from datetime import UTC
 from datetime import datetime
 from decimal import Decimal
@@ -9,6 +10,8 @@ from decimal import Decimal
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core import SYSTEM_TENANT_ID
+from app.core.tenant import tenant_context
 from app.models.customer import Customer
 from app.models.order import Order
 from app.models.order_item import OrderItem
@@ -21,6 +24,18 @@ from app.repositories.commerce_repository import OrderRepository
 from app.repositories.commerce_repository import ProductRepository
 from app.repositories.commerce_repository import ProductReturnRepository
 from app.repositories.commerce_repository import RegionRepository
+
+
+@pytest.fixture(autouse=True)
+def _tenant_context() -> Generator[None]:
+    """Scope every test to the system tenant.
+
+    Mirrors the fallback tenant production code uses when no explicit
+    tenant is supplied, so these tenant-scoped repositories can be
+    exercised without a dedicated `Tenant` fixture per test.
+    """
+    with tenant_context(SYSTEM_TENANT_ID):
+        yield
 
 
 class TestRegionRepository:
