@@ -14,10 +14,13 @@ from app.models.base import TenantBase
 from app.models.customer import Customer
 from app.models.feature_flag import FeatureFlag
 from app.models.file import File
+from app.models.graveyard import Graveyard
 from app.models.oauth_account import OAuthAccount
 from app.models.oauth_account import OAuthProvider
 from app.models.order import Order
 from app.models.order_item import OrderItem
+from app.models.outbox import Outbox
+from app.models.outbox import OutboxEvent
 from app.models.product import Product
 from app.models.product_return import ProductReturn
 from app.models.region import Region
@@ -37,10 +40,13 @@ __all__ = [
     "FeatureFlag",
     "FrequentItemset",
     "File",
+    "Graveyard",
     "OAuthAccount",
     "OAuthProvider",
     "Order",
     "OrderItem",
+    "Outbox",
+    "OutboxEvent",
     "Product",
     "ProductReturn",
     "Region",
