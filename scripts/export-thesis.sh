@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Build the thesis PDF and drop a copy at dist/<author>.pdf for handoff.
+# Build the thesis PDF and drop a copy at documents/<author>-thesis.pdf for
+# handoff.
 #
 #   ./scripts/export-thesis.sh            # requires local XeLaTeX + biber
 #   ./scripts/export-thesis.sh --docker   # build inside the TeX Live container
@@ -20,8 +21,7 @@ info "Building thesis (ENGINE=${ENGINE})..."
 make ENGINE="$ENGINE" || error "Thesis build failed, check thesis/main.log"
 
 AUTHOR_SLUG=$(sed -n 's/.*\\thesisauthorlatin}{\(.*\)}/\1/p' metadata.tex | tr -d ',' | tr ' ' '-')
-DEST="$PROJECT_DIR/dist/${AUTHOR_SLUG:-thesis}.pdf"
-mkdir -p "$PROJECT_DIR/dist"
+DEST="$PROJECT_DIR/documents/${AUTHOR_SLUG:-thesis}-thesis.pdf"
 cp main.pdf "$DEST"
 
 info "Thesis exported to ${DEST}"
