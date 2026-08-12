@@ -44,19 +44,24 @@ services:
     # --auto-aof-rewrite-min-size: The minimum size of the AOF file before Redis will consider rewriting it. This is useful to prevent Redis from rewriting the AOF file too often.
     # --auto-aof-rewrite-percentage: Redis will check the size of the AOF file every minute. If the AOF file grew by more than the percentage since the last rewrite and the AOF file is at least equal to --auto-aof-rewrite-min-size, it will rewrite the AOF.
     # --maxmemory: The maximum amount of memory Redis can use. If the limit is reached, Redis will start to evict keys according to the policy set by maxmemory-policy.
-    # --maxmemory-policy allkeys-lru: This is the default policy. It will evict the least recently used keys first, regardless of their type.
+    # --maxmemory-policy volatile-lru: Evicts the least recently used keys that have a TTL set first, leaving non-expiring keys (e.g. RedBeat schedule/lock state) untouched.
     # --maxclients: Limits the number of simultaneous connections to Redis.
-    command: "redis-server --appendonly yes --auto-aof-rewrite-percentage ${REDIS_AOF_REWRITE_PERCENTAGE?Variable not set} --auto-aof-rewrite-min-size ${REDIS_AOF_REWRITE_MINIMUM_SIZE?Variable not set} --maxmemory ${REDIS_MAXIMUM_MEMORY?Variable not set} --maxmemory-policy allkeys-lru --maxclients ${REDIS_MAXIMUM_CLIENTS?Variable not set} --requirepass ${REDIS_PASSWORD?Variable not set} --port ${REDIS_PORT?Variable not set}"
+    command: "redis-server --appendonly yes --auto-aof-rewrite-percentage ${REDIS_AOF_REWRITE_PERCENTAGE?Variable not set} --auto-aof-rewrite-min-size ${REDIS_AOF_REWRITE_MINIMUM_SIZE?Variable not set} --maxmemory ${REDIS_MAXIMUM_MEMORY?Variable not set} --maxmemory-policy volatile-lru --maxclients ${REDIS_MAXIMUM_CLIENTS?Variable not set} --requirepass ${REDIS_PASSWORD?Variable not set} --port ${REDIS_PORT?Variable not set}"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: "5s"
       timeout: "3s"
       retries: 5
     restart: "unless-stopped"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: "512M"
     networks:
       - "internal"
     ports:
-      - "${REDIS_PORT?Variable not set}:${REDIS_PORT?Variable not set}"
+      - "127.0.0.1:${REDIS_PORT?Variable not set}:${REDIS_PORT?Variable not set}"
     volumes:
       - "redis:/data"
     labels:
@@ -82,7 +87,7 @@ services:
       --requirepass ${REDIS_PASSWORD?Variable not set}
       --masterauth ${REDIS_PASSWORD?Variable not set}
       --maxmemory ${REDIS_MAXIMUM_MEMORY?Variable not set}
-      --maxmemory-policy allkeys-lru
+      --maxmemory-policy volatile-lru
       --maxclients ${REDIS_MAXIMUM_CLIENTS?Variable not set}
     healthcheck:
       test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD?Variable not set}", "ping"]
@@ -90,6 +95,11 @@ services:
       timeout: "3s"
       retries: 5
     restart: "unless-stopped"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: "512M"
     networks:
       - "internal"
     volumes:
@@ -112,7 +122,7 @@ services:
       --requirepass ${REDIS_PASSWORD?Variable not set}
       --masterauth ${REDIS_PASSWORD?Variable not set}
       --maxmemory ${REDIS_MAXIMUM_MEMORY?Variable not set}
-      --maxmemory-policy allkeys-lru
+      --maxmemory-policy volatile-lru
       --maxclients ${REDIS_MAXIMUM_CLIENTS?Variable not set}
     healthcheck:
       test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD?Variable not set}", "ping"]
@@ -120,6 +130,11 @@ services:
       timeout: "3s"
       retries: 5
     restart: "unless-stopped"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: "512M"
     networks:
       - "internal"
     volumes:
@@ -142,7 +157,7 @@ services:
       --requirepass ${REDIS_PASSWORD?Variable not set}
       --masterauth ${REDIS_PASSWORD?Variable not set}
       --maxmemory ${REDIS_MAXIMUM_MEMORY?Variable not set}
-      --maxmemory-policy allkeys-lru
+      --maxmemory-policy volatile-lru
       --maxclients ${REDIS_MAXIMUM_CLIENTS?Variable not set}
     healthcheck:
       test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD?Variable not set}", "ping"]
@@ -150,6 +165,11 @@ services:
       timeout: "3s"
       retries: 5
     restart: "unless-stopped"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: "512M"
     networks:
       - "internal"
     volumes:
@@ -172,7 +192,7 @@ services:
       --requirepass ${REDIS_PASSWORD?Variable not set}
       --masterauth ${REDIS_PASSWORD?Variable not set}
       --maxmemory ${REDIS_MAXIMUM_MEMORY?Variable not set}
-      --maxmemory-policy allkeys-lru
+      --maxmemory-policy volatile-lru
       --maxclients ${REDIS_MAXIMUM_CLIENTS?Variable not set}
     healthcheck:
       test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD?Variable not set}", "ping"]
@@ -180,6 +200,11 @@ services:
       timeout: "3s"
       retries: 5
     restart: "unless-stopped"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: "512M"
     networks:
       - "internal"
     volumes:
@@ -202,7 +227,7 @@ services:
       --requirepass ${REDIS_PASSWORD?Variable not set}
       --masterauth ${REDIS_PASSWORD?Variable not set}
       --maxmemory ${REDIS_MAXIMUM_MEMORY?Variable not set}
-      --maxmemory-policy allkeys-lru
+      --maxmemory-policy volatile-lru
       --maxclients ${REDIS_MAXIMUM_CLIENTS?Variable not set}
     healthcheck:
       test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD?Variable not set}", "ping"]
@@ -210,6 +235,11 @@ services:
       timeout: "3s"
       retries: 5
     restart: "unless-stopped"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: "512M"
     networks:
       - "internal"
     volumes:
@@ -232,7 +262,7 @@ services:
       --requirepass ${REDIS_PASSWORD?Variable not set}
       --masterauth ${REDIS_PASSWORD?Variable not set}
       --maxmemory ${REDIS_MAXIMUM_MEMORY?Variable not set}
-      --maxmemory-policy allkeys-lru
+      --maxmemory-policy volatile-lru
       --maxclients ${REDIS_MAXIMUM_CLIENTS?Variable not set}
     healthcheck:
       test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD?Variable not set}", "ping"]
@@ -240,6 +270,11 @@ services:
       timeout: "3s"
       retries: 5
     restart: "unless-stopped"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: "512M"
     networks:
       - "internal"
     volumes:

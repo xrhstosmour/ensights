@@ -1,6 +1,5 @@
 # TODO: Use Secrets to store the passwords to all containers.
 # TODO: Implement Traefik labels for reverse proxy, even in local network.
-# TODO: Use a custom RABBITMQ_ERLANG_COOKIE.
 # TODO: Create self signed certificates the same way as all the containers using them.
 networks:
   internal:
@@ -23,19 +22,28 @@ services:
       timeout: "5s"
       retries: 5
     restart: "unless-stopped"
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: "1G"
     networks:
       - "internal"
     ports:
       - "${RABBITMQ_PORT?Variable not set}:${RABBITMQ_PORT?Variable not set}"
-      - "${RABBITMQ_MANAGEMENT_PORT?Variable not set}:15672"
+      - "${RABBITMQ_MANAGEMENT_PORT?Variable not set}:${RABBITMQ_MANAGEMENT_PORT?Variable not set}"
     volumes:
       - "rabbitmq:/var/lib/rabbitmq"
-      - "./configuration/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf"
-      - "./certificates:/etc/rabbitmq/certificates"
+      - "./configuration/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf.template:ro"
+      - "./configuration/render-config.sh:/usr/local/bin/render-config.sh:ro"
+      - "./certificates:/etc/rabbitmq/certificates:ro"
     environment:
-      - "RABBITMQ_USER=${RABBITMQ_USER?Variable not set}"
-      - "RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD?Variable not set}"
+      - "RABBITMQ_DEFAULT_USER=${RABBITMQ_USER?Variable not set}"
+      - "RABBITMQ_DEFAULT_PASS=${RABBITMQ_PASSWORD?Variable not set}"
       - "RABBITMQ_CONSUMER_TIMEOUT=${RABBITMQ_CONSUMER_TIMEOUT?Variable not set}"
       - "RABBITMQ_PORT=${RABBITMQ_PORT?Variable not set}"
+      - "RABBITMQ_MANAGEMENT_PORT=${RABBITMQ_MANAGEMENT_PORT?Variable not set}"
+      - "RABBITMQ_ERLANG_COOKIE=${RABBITMQ_ERLANG_COOKIE?Variable not set}"
+    command: ["sh", "/usr/local/bin/render-config.sh"]
     labels:
       - "traefik.enable=false"

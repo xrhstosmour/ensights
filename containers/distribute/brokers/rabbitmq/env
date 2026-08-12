@@ -11,3 +11,4 @@ RABBITMQ_USER='string_with_special_characters'
 RABBITMQ_PASSWORD='string_with_special_characters'
 # Consumer timeout should be in milliseconds.
 RABBITMQ_CONSUMER_TIMEOUT=910111213
+RABBITMQ_ERLANG_COOKIE='string_with_special_characters'
