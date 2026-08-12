@@ -18,6 +18,7 @@ from app.core.logging import get_logger
 from app.dependencies import CurrentUser
 from app.dependencies import SessionDependency
 from app.schemas.business_metrics import CohortRetentionRow
+from app.schemas.business_metrics import CohortShapeRow
 from app.schemas.business_metrics import CustomerSummary
 from app.schemas.business_metrics import GrossMerchandiseValueRow
 from app.schemas.business_metrics import RfmRow
@@ -160,6 +161,53 @@ async def cohort_retention(
     except AnalyticsError as error:
         raise _bad_request(error) from error
     return [CohortRetentionRow.model_validate(row) for row in rows]
+
+
+@router.get(
+    "/cohort-shape",
+    response_model=list[CohortShapeRow],
+    summary="Revenue trend per acquisition cohort",
+    description=(
+        "Fits a trend to each cohort's revenue-retention curve and labels it "
+        "super-linear, linear or sub-linear. Cohorts with fewer than two "
+        "periods after acquisition are omitted, there is nothing to trend yet."
+    ),
+)
+async def cohort_shape(
+    session: SessionDependency,
+    _current_user: CurrentUser,
+    start: StartQuery = None,
+    end: EndQuery = None,
+) -> list[CohortShapeRow]:
+    """Classify each acquisition cohort's revenue trend.
+
+    Args:
+        session: Async database session.
+        _current_user: Authenticated caller.
+        start: Inclusive start of the reporting window.
+        end: Exclusive end of the reporting window.
+
+    Returns:
+        One row per cohort old enough to trend.
+
+    Raises:
+        HTTPException: 400 when the reporting window is invalid.
+    """
+    try:
+        results = await BusinessMetricsService(session).cohort_shape(start, end)
+    except AnalyticsError as error:
+        raise _bad_request(error) from error
+    return [
+        CohortShapeRow.model_validate(
+            {
+                "cohort_month": result.cohort_month,
+                "periods": result.periods,
+                "slope": result.slope,
+                "shape": result.shape,
+            }
+        )
+        for result in results
+    ]
 
 
 @router.get(
