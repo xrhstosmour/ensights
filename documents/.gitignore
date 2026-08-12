@@ -1,0 +1,4 @@
+# The exported thesis PDF is a build artifact, produced from thesis/ by
+# scripts/export-thesis.sh, not committed for the same reason
+# thesis/main.pdf itself is not (see thesis/.gitignore).
+*.pdf
