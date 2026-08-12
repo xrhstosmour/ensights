@@ -18,6 +18,7 @@ account; this is the working one.
 | [Clustering](clustering.md) | `app/analysis/clustering.py` |
 | [Forecasting](forecasting.md) | `app/analysis/forecasting.py` |
 | [Profitability](profitability.md) | `app/analysis/profitability.py` |
+| [Product-market fit, in plain words](product-market-fit.md) | Every metric above that comes from the PMF literature, explained and sourced |
 
 ## The rule that runs through all of them
 

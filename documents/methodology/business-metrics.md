@@ -1,7 +1,9 @@
 # Business metrics
 
 GMV, repeat purchase rate, cohort retention and RFM. All measured; no
-assumptions anywhere in this module.
+assumptions anywhere in this module. For what each of these means in plain
+words and where the ideas come from, see
+[product-market-fit.md](product-market-fit.md).
 
 ## Decisions worth knowing
 
