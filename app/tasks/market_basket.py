@@ -44,16 +44,19 @@ def mine_market_baskets_task(
     """
     import asyncio
     from datetime import datetime
+    from uuid import UUID
 
+    from app.core import SYSTEM_TENANT_ID
     from app.core.tenant import set_current_tenant_id
     from app.database import celery_session_factory
     from app.services.market_basket_service import MarketBasketService
 
     async def _run() -> dict:
-        if tenant_id is not None:
-            from uuid import UUID
-
-            set_current_tenant_id(UUID(tenant_id))
+        # A caller with no tenant to scope the mining run to still needs a
+        # real tenant context, or every tenant-scoped read in the run would
+        # have none either. Falls back to the system tenant, the same
+        # fallback used elsewhere for tenant-less operations.
+        set_current_tenant_id(UUID(tenant_id) if tenant_id else SYSTEM_TENANT_ID)
 
         async with celery_session_factory() as session:
             service = MarketBasketService(session)

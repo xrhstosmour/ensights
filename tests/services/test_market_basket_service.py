@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+from collections.abc import Generator
 from pathlib import Path
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.analysis.frequent_itemsets import APRIORI
+from app.core import SYSTEM_TENANT_ID
+from app.core.tenant import tenant_context
 from app.ingestion.online_retail import OnlineRetailCSVAdapter
 from app.services.ingestion_service import IngestionService
 from app.services.market_basket_service import InvalidMiningParametersError
@@ -18,6 +21,18 @@ from app.services.market_basket_service import MarketBasketService
 FIXTURE = (
     Path(__file__).resolve().parent.parent / "fixtures" / "online_retail_baskets.csv"
 )
+
+
+@pytest.fixture(autouse=True)
+def _tenant_context() -> Generator[None]:
+    """Scope every test to the system tenant.
+
+    Mirrors the fallback tenant production code uses when no explicit
+    tenant is supplied, so these tenant-scoped repositories can be
+    exercised without a dedicated `Tenant` fixture per test.
+    """
+    with tenant_context(SYSTEM_TENANT_ID):
+        yield
 
 
 async def _seed(session: AsyncSession) -> MarketBasketService:
