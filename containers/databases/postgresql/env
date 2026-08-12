@@ -10,7 +10,7 @@ POSTGRESQL_PORT=1234
 POSTGRESQL_USER='string_with_special_characters'
 POSTGRESQL_PASSWORD='string_with_special_characters'
 # Existing authentication methods are:
-# 1. trust: This method allows connections unconditionally. It means any client can connect without supplying a password.
+# 1. trust: This method allows connections unconditionally. It means any client can connect without supplying a password. Never use outside a fully trusted, local-only network.
 # 2. reject: This method refuses the connection attempt unconditionally.
 # 3. md5: Requires the client to supply an MD5-hashed password for authentication.
 # 4. password: Requires the client to supply an unencrypted password for authentication. PostgreSQL will check the password against the stored MD5-hashed password.
