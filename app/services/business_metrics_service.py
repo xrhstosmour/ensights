@@ -14,6 +14,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 from typing import Any
 
+from app.analysis.cohort_shape import CohortShapeResult
+from app.analysis.cohort_shape import classify_all
 from app.core.logging import get_logger
 from app.repositories.business_metrics_repository import BusinessMetricsRepository
 from app.services.analytics_service import AnalyticsError
@@ -131,6 +133,28 @@ class BusinessMetricsService:
         """
         self._validate_window(start, end)
         return await self.repository.cohort_retention(start, end)
+
+    async def cohort_shape(
+        self,
+        start: datetime | None = None,
+        end: datetime | None = None,
+    ) -> list[CohortShapeResult]:
+        """Classify each acquisition cohort's revenue trend.
+
+        Args:
+            start: Inclusive lower bound on order time.
+            end: Exclusive upper bound on order time.
+
+        Returns:
+            One result per cohort with at least two periods after
+            acquisition; cohorts too young to trend are omitted.
+
+        Raises:
+            InvalidReportingWindowError: If the window is inverted.
+        """
+        self._validate_window(start, end)
+        rows = await self.repository.cohort_retention(start, end)
+        return classify_all(rows)
 
     async def rfm(
         self,
