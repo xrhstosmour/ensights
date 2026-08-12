@@ -30,17 +30,20 @@ def import_online_retail_task(self, path: str, tenant_id: str | None = None) -> 
         Result dict with the import counters.
     """
     import asyncio
+    from uuid import UUID
 
+    from app.core import SYSTEM_TENANT_ID
     from app.core.tenant import set_current_tenant_id
     from app.database import celery_session_factory
     from app.ingestion.online_retail import OnlineRetailCSVAdapter
     from app.services.ingestion_service import IngestionService
 
     async def _run() -> dict:
-        if tenant_id is not None:
-            from uuid import UUID
-
-            set_current_tenant_id(UUID(tenant_id))
+        # A caller with no tenant to scope the import to still needs a real
+        # tenant context, or every tenant-scoped write/read in the import
+        # would have none either. Falls back to the system tenant, the
+        # same fallback used elsewhere for tenant-less operations.
+        set_current_tenant_id(UUID(tenant_id) if tenant_id else SYSTEM_TENANT_ID)
 
         async with celery_session_factory() as session:
             service = IngestionService(session)
@@ -87,9 +90,11 @@ def import_sql_source_task(
             for example a mapping missing a required canonical field.
     """
     import asyncio
+    from uuid import UUID
 
     from pydantic import ValidationError
 
+    from app.core import SYSTEM_TENANT_ID
     from app.core.tenant import set_current_tenant_id
     from app.database import celery_session_factory
     from app.ingestion.sql_source import SQLDataSourceAdapter
@@ -103,10 +108,9 @@ def import_sql_source_task(
         raise ValueError(message) from error
 
     async def _run() -> dict:
-        if tenant_id is not None:
-            from uuid import UUID
-
-            set_current_tenant_id(UUID(tenant_id))
+        # See import_online_retail_task() for why this falls back rather
+        # than skipping when there is no tenant to scope the import to.
+        set_current_tenant_id(UUID(tenant_id) if tenant_id else SYSTEM_TENANT_ID)
 
         async with celery_session_factory() as session:
             service = IngestionService(session)
