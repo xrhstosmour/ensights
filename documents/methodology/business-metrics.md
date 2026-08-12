@@ -1,7 +1,9 @@
 # Business metrics
 
 GMV, repeat purchase rate, cohort retention and RFM. All measured; no
-assumptions anywhere in this module.
+assumptions anywhere in this module. For what each of these means in plain
+words and where the ideas come from, see
+[product-market-fit.md](product-market-fit.md).
 
 ## Decisions worth knowing
 
@@ -34,3 +36,17 @@ The same features feed the level-two [clustering](clustering.md).
 The retention grid is triangular by construction: newer cohorts have had fewer
 months to return. Empty cells at the lower right mean "not yet observable", not
 "zero retention". Do not fill them.
+
+## Revenue retention rides alongside logo retention
+
+Each row of the cohort grid also carries `period_revenue`, `cohort_revenue`
+and `revenue_retention_rate`, the same idea as the customer-count retention
+above, but for the revenue that cohort produced instead of the headcount.
+`cohort_revenue` is always the cohort's own first-period revenue, so
+`revenue_retention_rate` is always 1.0 at `period_index` 0 by construction.
+
+The `/cohort-shape` endpoint (`app/analysis/cohort_shape.py`) fits a trend
+line through each cohort's `revenue_retention_rate` and labels it
+super-linear, linear or sub-linear. It needs at least two periods after a
+cohort's own acquisition month to fit anything, cohorts younger than that are
+omitted from the result rather than given a forced label.

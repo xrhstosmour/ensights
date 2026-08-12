@@ -2,7 +2,10 @@
 
 Decomposes revenue change into six flows and derives the ratios that describe
 whether growth is healthy. Follows the quantitative product-market-fit
-framework popularised by Tribe Capital, adapted to retail.
+framework from Tribe Capital's
+[A Quantitative Approach to Product Market Fit](https://tribecap.co/essays/a-quantitative-approach-to-product-market-fit),
+adapted to retail. For what each ratio means in plain words, see
+[product-market-fit.md](product-market-fit.md).
 
 Measured, not assumed: it needs only the transaction record.
 

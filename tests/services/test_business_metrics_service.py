@@ -276,6 +276,87 @@ class TestCohortRetention:
             if row["period_index"] == 0:
                 assert row["active_customers"] == row["cohort_size"]
 
+    @pytest.mark.anyio
+    async def test_revenue_retention_rate_uses_the_cohorts_own_first_period(
+        self, session: AsyncSession
+    ) -> None:
+        """December's cohort spends less each month, off its own baseline.
+
+        11111 and 22222 together produce 40.00 in December (period 0). Only
+        11111 returns, at 8.00 in January and 4.00 in February.
+
+        Args:
+            session: Async database session fixture.
+
+        Returns:
+            None.
+        """
+        service = await _seed(session, COHORTS)
+
+        rows = await service.cohort_retention()
+        december = {
+            row["period_index"]: row for row in rows if row["cohort_month"].month == 12
+        }
+
+        assert december[0]["cohort_revenue"] == Decimal("40.0000")
+        assert december[0]["revenue_retention_rate"] == pytest.approx(1.0)
+        assert december[1]["period_revenue"] == Decimal("8.0000")
+        assert december[1]["revenue_retention_rate"] == pytest.approx(0.2)
+        assert december[2]["period_revenue"] == Decimal("4.0000")
+        assert december[2]["revenue_retention_rate"] == pytest.approx(0.1)
+
+
+class TestCohortShape:
+    """Tests for the per-cohort revenue trend classification."""
+
+    @pytest.fixture
+    def anyio_backend(self) -> str:
+        """Provide asyncio backend for anyio-marked tests.
+
+        Returns:
+            The backend name.
+        """
+        return "asyncio"
+
+    @pytest.mark.anyio
+    async def test_december_cohort_is_sub_linear(self, session: AsyncSession) -> None:
+        """December's revenue retention falls from 0.2 to 0.1, a clear decline.
+
+        Args:
+            session: Async database session fixture.
+
+        Returns:
+            None.
+        """
+        service = await _seed(session, COHORTS)
+
+        results = {
+            result.cohort_month.month: result for result in await service.cohort_shape()
+        }
+
+        assert results[12].shape == "sub-linear"
+        assert results[12].periods == 2
+        assert results[12].slope < 0
+
+    @pytest.mark.anyio
+    async def test_cohorts_too_young_to_trend_are_omitted(
+        self, session: AsyncSession
+    ) -> None:
+        """January and February each have only one period after acquisition.
+
+        Args:
+            session: Async database session fixture.
+
+        Returns:
+            None.
+        """
+        service = await _seed(session, COHORTS)
+
+        results = await service.cohort_shape()
+
+        months = {result.cohort_month.month for result in results}
+        assert months == {12}
+
 
 class TestRfm:
     """Tests for the RFM feature table."""
