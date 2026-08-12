@@ -43,7 +43,45 @@ class CohortRetentionRow(BaseSchema):
     )
     active_customers: int = 0
     cohort_size: int = 0
-    retention_rate: float = 0.0
+    retention_rate: float = Field(
+        default=0.0,
+        description="Logo retention: active_customers divided by cohort_size.",
+    )
+    period_revenue: Decimal = Field(
+        default=Decimal("0"),
+        description="Revenue this cohort produced in this period.",
+    )
+    cohort_revenue: Decimal = Field(
+        default=Decimal("0"),
+        description="Revenue this cohort produced in its own first period, "
+        "the baseline revenue_retention_rate is measured against.",
+    )
+    revenue_retention_rate: float = Field(
+        default=0.0,
+        description="Revenue retention: period_revenue divided by cohort_revenue.",
+    )
+
+
+class CohortShapeRow(BaseSchema):
+    """Trend classification for one acquisition cohort's revenue curve.
+
+    Fit only from the periods after the cohort's own first month, since that
+    first period is always a 1.0 revenue_retention_rate by definition and
+    carries no trend information.
+    """
+
+    cohort_month: datetime
+    periods: int = Field(
+        description="Number of periods after acquisition the trend was fit from."
+    )
+    slope: float = Field(
+        description="Change in revenue_retention_rate per period. Positive "
+        "means the cohort is spending more over time, negative less."
+    )
+    shape: str = Field(
+        description='One of "super-linear" (spend grows over time), '
+        '"linear" (roughly flat) or "sub-linear" (spend declines over time).'
+    )
 
 
 class RfmRow(BaseSchema):

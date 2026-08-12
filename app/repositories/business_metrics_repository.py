@@ -252,8 +252,9 @@ class BusinessMetricsRepository:
             end: Exclusive upper bound on order time.
 
         Returns:
-            Rows of cohort month, period index, active customers, cohort size
-            and retention rate.
+            Rows of cohort month, period index, active customers, cohort
+            size, retention rate, period revenue, cohort revenue and revenue
+            retention rate.
         """
         month = func.date_trunc(literal("month"), col(Order.ordered_at))
 
@@ -261,11 +262,13 @@ class BusinessMetricsRepository:
             select(
                 col(Order.customer_id).label("customer_id"),
                 month.label("activity_month"),
+                func.sum(col(OrderItem.line_total)).label("revenue"),
             )
+            .join(OrderItem, col(OrderItem.order_id) == col(Order.id))
             .where(col(Order.customer_id).is_not(None))
             .group_by(col(Order.customer_id), month)
         )
-        activity = self._scope(activity, Order)
+        activity = self._scope(activity, Order, OrderItem)
         activity = self._window(activity, start, end)
         activity_subquery = activity.subquery()
 
@@ -295,6 +298,7 @@ class BusinessMetricsRepository:
                 func.count(func.distinct(activity_subquery.c.customer_id)).label(
                     "active_customers"
                 ),
+                func.sum(activity_subquery.c.revenue).label("period_revenue"),
             )
             .select_from(
                 activity_subquery.join(
@@ -314,11 +318,26 @@ class BusinessMetricsRepository:
             for row in rows
             if int(row["period_index"]) == 0
         }
+        # A cohort's own first period is its revenue baseline: how much later
+        # periods retain is measured against what that period alone produced.
+        baseline_revenue = {
+            row["cohort_month"]: row["period_revenue"] or 0
+            for row in rows
+            if int(row["period_index"]) == 0
+        }
         for row in rows:
             row["period_index"] = int(row["period_index"])
             size = sizes.get(row["cohort_month"], 0)
             row["cohort_size"] = size
             row["retention_rate"] = row["active_customers"] / size if size else 0.0
+            row["period_revenue"] = row["period_revenue"] or 0
+            cohort_revenue = baseline_revenue.get(row["cohort_month"], 0)
+            row["cohort_revenue"] = cohort_revenue
+            row["revenue_retention_rate"] = (
+                float(row["period_revenue"]) / float(cohort_revenue)
+                if cohort_revenue
+                else 0.0
+            )
         return rows
 
     async def rfm(
