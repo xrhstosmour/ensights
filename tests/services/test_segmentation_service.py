@@ -2,17 +2,32 @@
 
 from __future__ import annotations
 
+from collections.abc import Generator
 from pathlib import Path
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core import SYSTEM_TENANT_ID
+from app.core.tenant import tenant_context
 from app.ingestion.online_retail import OnlineRetailCSVAdapter
 from app.services.ingestion_service import IngestionService
 from app.services.segmentation_service import SegmentationService
 
 FIXTURES = Path(__file__).resolve().parent.parent / "fixtures"
 COHORTS = FIXTURES / "online_retail_cohorts.csv"
+
+
+@pytest.fixture(autouse=True)
+def _tenant_context() -> Generator[None]:
+    """Scope every test to the system tenant.
+
+    Mirrors the fallback tenant production code uses when no explicit
+    tenant is supplied, so these tenant-scoped repositories can be
+    exercised without a dedicated `Tenant` fixture per test.
+    """
+    with tenant_context(SYSTEM_TENANT_ID):
+        yield
 
 
 async def _seed(session: AsyncSession) -> SegmentationService:
