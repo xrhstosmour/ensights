@@ -21,17 +21,28 @@ services:
       timeout: "5s"
       retries: 5
     restart: "unless-stopped"
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: "2G"
     networks:
       - "internal"
     ports:
-      - "${POSTGRESQL_PORT?Variable not set}:${POSTGRESQL_PORT?Variable not set}"
+      # Loopback-only: other containers reach this over the `internal` Docker
+      # network directly, not through the published host port, so this is
+      # for local/tunnelled admin access only, the same restriction already
+      # applied to pgAdmin4/Metabase/Redis Commander/Mailpit.
+      - "127.0.0.1:${POSTGRESQL_PORT?Variable not set}:${POSTGRESQL_PORT?Variable not set}"
     volumes:
       - "postgresql:/var/lib/postgresql/data"
-      - "./configuration/postgresql.conf:/etc/postgresql.conf"
+      - "./configuration/postgresql.conf:/etc/postgresql.conf:ro"
+      - "./initialize-databases.sh:/docker-entrypoint-initdb.d/initialize-databases.sh:ro"
     environment:
       - "POSTGRES_PASSWORD=${POSTGRESQL_PASSWORD?Variable not set}"
       - "POSTGRES_USER=${POSTGRESQL_USER?Variable not set}"
       - "POSTGRES_HOST_AUTH_METHOD=${POSTGRESQL_AUTHENTICATION_METHOD?Variable not set}"
-    command: "-p ${POSTGRESQL_PORT?Variable not set}"
+      - "POSTGRESQL_ADDITIONAL_DATABASES=${POSTGRESQL_ADDITIONAL_DATABASES:-}"
+    command: "-c config_file=/etc/postgresql.conf -p ${POSTGRESQL_PORT?Variable not set}"
     labels:
       - "traefik.enable=false"

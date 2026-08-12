@@ -19,3 +19,6 @@ POSTGRESQL_PASSWORD='string_with_special_characters'
 # 7. peer: Used for local connections, it works by obtaining the client's OS username from the operating system.
 # 8. ldap, radius, cert, pam, bsd: These are other external authentication methods supported by PostgreSQL.
 POSTGRESQL_AUTHENTICATION_METHOD='string_with_special_characters'
+# Extra databases to create on first initialization, comma or space separated.
+# Companion services such as GlitchTip and Metabase expect their own database.
+POSTGRESQL_ADDITIONAL_DATABASES='comma_separated_database_names'
