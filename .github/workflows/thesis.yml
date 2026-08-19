@@ -19,9 +19,12 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    # Same image the Makefile uses with ENGINE=docker, so a local build and
-    # this job resolve identical TeX Live, biber and font versions.
-    container: texlive/texlive:latest
+    # Same image, pinned to the same digest, the Makefile uses with
+    # ENGINE=docker, so a local build and this job resolve identical TeX
+    # Live, biber and font versions. Pinned rather than `:latest`: that tag
+    # drifts, and an upstream TeX Live update once broke the Greek
+    # biblatex-apa strings this manuscript depends on.
+    container: texlive/texlive@sha256:1cb66a6dc31fe153369c5bb63549aea31c2ffb351613af67b182d84c8521fe89
     defaults:
       run:
         working-directory: thesis
