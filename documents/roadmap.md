@@ -13,8 +13,16 @@ Extract predictions and statistics that drive the marketing and sales decisions
 of an e-commerce business, from its own transaction data, using data mining and
 machine learning.
 
-Department of Informatics and Telecommunications, National and Kapodistrian
-University of Athens.
+Submitted to the interdepartmental postgraduate programme «Διοίκηση και
+Οικονομική των Τηλεπικοινωνιακών Δικτύων και Πληροφοριακών Συστημάτων»
+(Management and Economics of Telecommunication Networks and Information
+Systems), National and Kapodistrian University of Athens, run jointly by the
+Department of Informatics and Telecommunications and the Department of
+Economics.
+
+The programme pairing is a scope constraint, not a formality. The work is read
+by both sides, so a result that is technically sound but economically
+uninterpretable, or an economic claim the data cannot support, both fail.
 
 | Role | Person |
 | --- | --- |
