@@ -2,11 +2,52 @@
 
 from __future__ import annotations
 
+from datetime import UTC
+from datetime import datetime
 from decimal import Decimal
 
+from app.ingestion.base import CanonicalRecord
+from app.ingestion.normalisation import classify_record
 from app.ingestion.normalisation import parse_bool
 from app.ingestion.normalisation import parse_decimal
 from app.ingestion.normalisation import parse_int
+
+
+def _record(stock_code: str) -> CanonicalRecord:
+    """Build a minimal valid record for classification tests.
+
+    Args:
+        stock_code: The stock code to classify.
+
+    Returns:
+        A record that would otherwise pass every check.
+    """
+    return CanonicalRecord(
+        order_number="SO-1",
+        ordered_at=datetime(2024, 1, 1, tzinfo=UTC),
+        stock_code=stock_code,
+        quantity=1,
+        unit_price=Decimal("1.00"),
+    )
+
+
+class TestClassifyRecord:
+    """Tests for classify_record()."""
+
+    def test_only_caller_supplied_codes_are_rejected(self) -> None:
+        """A code not in `non_product_codes` is accepted, whatever it looks like.
+
+        This is the shared function every ingestion source calls, so it must
+        not guess at administrative codes on its own; each source declares
+        its own. A source-specific quirk, like the Online Retail II adapter's
+        gift-voucher prefix, belongs in that adapter, not here.
+        """
+        assert classify_record(_record("GIFT_0001_20")) is None
+
+    def test_caller_supplied_code_is_rejected(self) -> None:
+        """A code declared by the caller is still rejected."""
+        reason = classify_record(_record("POSTAGE"), frozenset({"POSTAGE"}))
+        assert reason == "non_product_code"
 
 
 class TestParseDecimal:
