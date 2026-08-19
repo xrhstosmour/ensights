@@ -26,7 +26,7 @@ credentials `setup.sh` generated:
 | Host | `postgresql` (the container name) |
 | Port | `5432` |
 | Database name | value of `POSTGRESQL_DATABASE` in `.env` |
-| Username | `metabase_read_only` |
+| Username | `metabase_readonly` |
 | Password | value of `METABASE_READ_ONLY_PASSWORD` in `.env` |
 
 The read-only user is the point: a dashboard should never be able to write to
