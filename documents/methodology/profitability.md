@@ -17,7 +17,7 @@ explicitly, vary them, and report what follows *if* they hold.
 
 - Separate module, separate service, separate endpoints.
 - **Every result carries a `disclaimer` field and the assumptions that produced
-  it** — through the module, the service, each API response and each sweep row.
+  it**, through the module, the service, each API response and each sweep row.
   Tests assert this on every output path.
 - No Metabase card. A dashboard tile stripped of its assumptions is exactly the
   misreading this design prevents.

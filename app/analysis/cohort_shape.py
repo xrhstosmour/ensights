@@ -10,9 +10,9 @@ A cohort's revenue_retention_rate at period_index 0 is always 1.0 by
 definition, so the trend is fit from period_index 1 onward. The slope of that
 line, in revenue_retention_rate per period, is classified as:
 
-* **super-linear** — positive slope, the cohort spends more over time
-* **linear** — slope within a small tolerance of zero, spend holds steady
-* **sub-linear** — negative slope, spend declines over time
+* **super-linear**, positive slope, the cohort spends more over time
+* **linear**, slope within a small tolerance of zero, spend holds steady
+* **sub-linear**, negative slope, spend declines over time
 
 The framework's authors give no numeric threshold for the tolerance band; it
 exists only so that rounding noise around a truly flat curve does not flip

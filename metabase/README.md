@@ -67,10 +67,10 @@ date filters; accept, and the clause is only applied when a value is supplied.
 
 Three dashboards cover the ground without duplicating cards:
 
-- **Sales** — 01, 03, 04, 05, 07. What sold, where and when.
-- **Customers** — 02, 09, 10, 12. Who bought, whether they came back, and how
+- **Sales**, 01, 03, 04, 05, 07. What sold, where and when.
+- **Customers**, 02, 09, 10, 12. Who bought, whether they came back, and how
   concentrated the revenue is.
-- **Merchandising** — 06, 11, 08. What came back, what sells together, and the
+- **Merchandising**, 06, 11, 08. What came back, what sells together, and the
   headline value.
 
 ## Reading the cards honestly
