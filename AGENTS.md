@@ -11,13 +11,13 @@ codebase a generic FastAPI backend does not have.
 
 ## Repository layout beyond the backend
 
-- `thesis/` — the LaTeX manuscript (Greek, XeLaTeX + biber). Own `Makefile` and
+- `thesis/`, the LaTeX manuscript (Greek, XeLaTeX + biber). Own `Makefile` and
   own CI job, see `documents/roadmap.md` for how chapters pair with code.
-- `documents/` — project-level docs. `roadmap.md` is the source of truth for
+- `documents/`, project-level docs. `roadmap.md` is the source of truth for
   scope and sequencing; `methodology/` holds one note per analytical module,
   covering the judgement calls behind it and where it stops being trustworthy.
-- `notebooks/` — experiment notebooks backing the thesis figures and metrics.
-- `metabase/` — SQL cards mirroring the API, for dashboards. A card and its
+- `notebooks/`, experiment notebooks backing the thesis figures and metrics.
+- `metabase/`, SQL cards mirroring the API, for dashboards. A card and its
   endpoint must always return the same numbers.
 
 ## Upstream template
@@ -93,7 +93,7 @@ background tasks, and comprehensive security features.
 
 ```
 app/
-  api/v1/           Route handlers — thin, delegate to services
+  api/v1/           Route handlers, thin, delegate to services
   schemas/          Pydantic request/response models
   services/         Business logic, orchestrates repositories
   repositories/     Database queries (BaseRepository generic CRUD)
@@ -154,7 +154,7 @@ uv run celery -A app.celery_app beat --loglevel=info
 
 - **Layered**: api → services → repositories → models. Never call repositories
   from route handlers; always go through a service.
-- **Dependency injection**: Type aliases in `dependencies.py` — `CurrentUser`,
+- **Dependency injection**: Type aliases in `dependencies.py`, `CurrentUser`,
   `SuperuserUser`, `SessionDependency`, `AccessTokenDependency`, `AnyAuth`.
 - **Custom exceptions**: Each service defines its own exception hierarchy
   (e.g. `AuthenticationError`, `InvalidCredentialsError`). API layer catches
@@ -171,7 +171,7 @@ uv run celery -A app.celery_app beat --loglevel=info
 ## Conventions
 
 - Python 3.14, `uv` package manager.
-- Full descriptive variable names — no abbreviations (`reference` not `ref`).
+- Full descriptive variable names, no abbreviations (`reference` not `ref`).
 - Google-style docstrings: `Args:`, `Returns:`, `Raises:`, `Example:`.
 - `from __future__ import annotations` at the top of every module.
 - `ruff` for linting (single-line imports, double quotes, LF).

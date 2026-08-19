@@ -121,7 +121,7 @@ Small PRs, each independently green. Sequence:
 
 | # | Deliverable | Thesis chapter |
 | --- | --- | --- |
-| 1 | Bootstrap from the `yap` template | — |
+| 1 | Bootstrap from the `yap` template | none |
 | 2 | Thesis LaTeX skeleton, build tooling, CI | structure |
 | 3 | Canonical domain models, migration, repositories | 3 |
 | 4 | `DataSourceAdapter` + Online Retail II importer | 3 |
@@ -132,8 +132,8 @@ Small PRs, each independently green. Sequence:
 | 9 | Sales forecasting, backtested | 7 |
 | 10 | Profitability scenarios on the forecast | 7 |
 | 11 | Growth accounting and PMF metrics | 7 |
-| 12 | Metabase dashboards | — |
-| 13 | Per-module methodology docs (`documents/methodology/`) | — |
+| 12 | Metabase dashboards | none |
+| 13 | Per-module methodology docs (`documents/methodology/`) | none |
 | 14 | Thesis polish: abstracts, front matter, chapters 1/2/3/8 | all |
 
 Chapters are drafted alongside the PR that produces their results, not batched
