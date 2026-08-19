@@ -1,8 +1,14 @@
 # Ensights
 
-Master's thesis project, National and Kapodistrian University of Athens,
-Department of Informatics and Telecommunications: **"Extraction of
-Intelligent Analytics from E-Commerce Data"**.
+Master's thesis project, National and Kapodistrian University of Athens:
+**"Extraction of Intelligent Analytics from E-Commerce Data"**.
+
+Submitted to the interdepartmental postgraduate programme in Management and
+Economics of Telecommunication Networks and Information Systems, run jointly
+by the Department of Informatics and Telecommunications and the Department of
+Economics. That pairing is why the work is judged on both sides: the data
+mining and the machine learning on one, and the economics the results are
+supposed to inform on the other.
 
 A FastAPI backend that turns raw e-commerce transactions into business
 intelligence: frequent itemsets, customer segmentation, revenue forecasting,
