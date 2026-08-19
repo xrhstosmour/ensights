@@ -157,9 +157,9 @@ candidate number of clusters is returned, so the choice of `chosen_k` can be
 checked rather than trusted:
 
 ```json
-{"chosen_k": 2, "silhouette": 0.875,
- "scores": {"2": 0.875, "3": 0.716, "4": 0.687, "5": 0.664},
- "clusters": [{"label": "1", "level": 1, "size": 39, "members": ["Australia", "Austria", "..."]}]}
+{"chosen_k": 2, "silhouette": 0.8793,
+ "scores": {"2": 0.8793, "3": 0.7206, "4": 0.6691, "5": 0.6347, "6": 0.6264},
+ "clusters": [{"label": "1", "level": 1, "size": 42, "members": ["Australia", "Austria", "..."]}]}
 ```
 
 **Growth accounting.** Each month's revenue is decomposed into where it came
