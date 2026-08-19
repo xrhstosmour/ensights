@@ -180,6 +180,25 @@ against 1618 one time customers, a repeat purchase rate of 72.4%, 6.25 orders
 per customer and an average order value of 493.63, which are the figures
 quoted in chapter 7.
 
+## Screenshots
+
+All three are the running system over the complete Online Retail II dataset,
+both sheets, 39,516 orders spanning 2009 to 2011.
+
+**Metabase**, the sales overview dashboard:
+
+![Metabase dashboard over the Online Retail II dataset](documents/screenshots/metabase-dashboard.png)
+
+**Frequent itemsets**, mined with FP-Growth and read back as association
+rules. Lift is the interesting column, since support and confidence alone
+would promote a rule whose right hand side is merely a popular product:
+
+![Association rules mined from the Online Retail II dataset](documents/screenshots/metabase-association-rules.jpg)
+
+**Swagger UI** at `/try`, every endpoint with "Try it out":
+
+![Swagger UI listing the Ensights API](documents/screenshots/swagger-try.jpg)
+
 ## Exporting the thesis PDF
 
 ```bash
