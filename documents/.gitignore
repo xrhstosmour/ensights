@@ -1,4 +1,8 @@
-# The exported thesis PDF is a build artifact, produced from thesis/ by
-# scripts/export-thesis.sh, not committed for the same reason
-# thesis/main.pdf itself is not (see thesis/.gitignore).
+# Build artefacts are not committed, with one deliberate exception below.
 *.pdf
+
+# The exported thesis PDF is committed on purpose, so the manuscript can be
+# read straight from the repository without a TeX Live installation or a
+# container. The Thesis CI job rebuilds and re-commits it whenever anything
+# under thesis/ changes on main, so it cannot silently fall behind the source.
+!*-thesis.pdf
