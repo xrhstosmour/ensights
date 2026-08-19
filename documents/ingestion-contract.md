@@ -15,6 +15,23 @@ There are three ways to deliver it, and they are held to identical rules:
 The rules live in `app/ingestion/normalisation.py` and are applied once, so no
 route can quietly accept what another rejects.
 
+## Getting a tenant and a token
+
+Every request below needs `Authorization: Bearer <token>`. Two ways to get
+one:
+
+- **Self-service, shared tenant.** `POST /api/v1/auth/register` with `email`,
+  `password`, and an optional `full_name` creates a user and returns tokens
+  immediately, no admin involved. This is enough to try Route 1 against your
+  own data right away, but the account lands in the shared system tenant
+  alongside anyone else who registered the same way.
+- **Isolated tenant.** `POST /api/v1/tenants` creates a dedicated tenant, but
+  it is admin-only (`SuperuserUser`), so a real deployment for one merchant
+  needs an admin to create it first. `./scripts/demo.sh` already seeds a
+  superuser for this: its email and where to find its password are printed
+  when the script runs, and its credentials work against `/api/v1/auth/login`
+  the same way a registered user's would.
+
 ## The canonical line
 
 | Field | Type | Required | Meaning |
@@ -65,6 +82,11 @@ merchandise. Left in, they win rankings they should not be in: in the reference
 dataset, manual adjustments and postage rank first and third by revenue. Send
 your own codes with the batch, or configure them on the source. They cannot be
 guessed reliably: codes that look administrative are sometimes real products.
+This applies uniformly across all three routes; the one exception is the
+Online Retail II adapter's own gift-voucher prefix check, scoped to that
+adapter alone because that dataset's voucher codes carry a variable
+denomination suffix (see `NON_PRODUCT_STOCK_CODES` in
+`app/ingestion/online_retail.py`) — it never affects your own data.
 
 ## Route 1: post a batch
 
@@ -122,7 +144,15 @@ the transaction already exists by then.
 ## Route 2: read from your database
 
 Grant a read-only account and describe where the fields live. No adapter is
-written per merchant:
+written per merchant. This is a Celery task, not an HTTP endpoint, so it runs
+from a Python process with the project's environment loaded and a worker
+running to pick it up:
+
+```bash
+# One-off, from the project root, with the worker already running
+# (`uv run celery -A app.celery_app worker --loglevel=info`):
+uv run --env-file .env python
+```
 
 ```python
 from app.ingestion.sql_source import SQLSourceConfiguration
