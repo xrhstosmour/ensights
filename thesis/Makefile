@@ -13,7 +13,9 @@ ENGINE ?= local
 LATEXMK_FLAGS := -xelatex -interaction=nonstopmode -halt-on-error -file-line-error
 
 ifeq ($(ENGINE),docker)
-RUN := docker run --rm -v "$(CURDIR)":/work -w /work texlive/texlive:latest
+# Pinned by digest: the `latest` tag drifts, and an upstream TeX Live update
+# once broke the Greek biblatex-apa strings this manuscript depends on.
+RUN := docker run --rm -v "$(CURDIR)":/work -w /work texlive/texlive@sha256:1cb66a6dc31fe153369c5bb63549aea31c2ffb351613af67b182d84c8521fe89
 else
 RUN :=
 endif
