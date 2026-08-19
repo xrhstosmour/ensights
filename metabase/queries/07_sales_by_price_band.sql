@@ -10,15 +10,15 @@ SELECT
         WHEN item.unit_price < 10  THEN '5-10'
         WHEN item.unit_price < 50  THEN '10-50'
         ELSE '50+'
-    END                          AS band,
-    COUNT(item.id)               AS lines,
-    SUM(item.quantity)           AS units,
-    SUM(item.line_total)         AS revenue
+    END                          AS "Price Band",
+    COUNT(item.id)               AS "Lines",
+    SUM(item.quantity)           AS "Units",
+    SUM(item.line_total)         AS "Revenue"
 FROM order_items AS item
 JOIN orders AS "order" ON "order".id = item.order_id
 WHERE item.deleted_at IS NULL
   AND "order".deleted_at IS NULL
   [[AND "order".ordered_at >= {{start}}]]
   [[AND "order".ordered_at <  {{end}}]]
-GROUP BY band
+GROUP BY "Price Band"
 ORDER BY MIN(item.unit_price);

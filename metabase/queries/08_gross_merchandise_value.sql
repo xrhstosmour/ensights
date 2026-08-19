@@ -33,11 +33,11 @@ refunds AS (
     GROUP BY period
 )
 SELECT
-    sales.period,
-    sales.orders,
-    sales.gross_merchandise_value,
-    COALESCE(refunds.refunds, 0)                                AS refunds,
-    sales.gross_merchandise_value - COALESCE(refunds.refunds, 0) AS net_merchandise_value
+    sales.period                                                AS "Date",
+    sales.orders                                                AS "Orders",
+    sales.gross_merchandise_value                               AS "GMV",
+    COALESCE(refunds.refunds, 0)                                AS "Refunds",
+    sales.gross_merchandise_value - COALESCE(refunds.refunds, 0) AS "Net Value"
 FROM sales
 LEFT JOIN refunds ON refunds.period = sales.period
 ORDER BY sales.period;
