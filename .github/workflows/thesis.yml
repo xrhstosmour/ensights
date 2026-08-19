@@ -1,7 +1,7 @@
 name: Thesis CI
 
 permissions:
-  contents: read
+  contents: write
 
 on:
   push:
@@ -49,3 +49,32 @@ jobs:
           name: thesis-pdf
           path: thesis/main.pdf
           if-no-files-found: error
+
+      # The exported PDF is committed so the manuscript can be read from the
+      # repository directly. Refreshing it here keeps it from drifting behind
+      # thesis/ when someone edits a chapter and forgets to re-export. Only on
+      # main, and only when the bytes actually changed. The commit touches
+      # documents/ alone, which this workflow does not watch, so it cannot
+      # retrigger itself.
+      - name: Commit the exported PDF
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        working-directory: .
+        run: |
+          author_slug=$(sed -n 's/.*\\thesisauthorlatin}{\(.*\)}/\1/p' thesis/metadata.tex \
+            | tr -d ',' | tr ' ' '-')
+          destination="documents/${author_slug:-thesis}-thesis.pdf"
+          cp thesis/main.pdf "$destination"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # The container runs as a different user than the checkout owner.
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+          if git diff --quiet -- "$destination"; then
+            echo "Exported PDF already current, nothing to commit."
+            exit 0
+          fi
+
+          git add "$destination"
+          git commit -m "Refresh the exported thesis PDF"
+          git push
