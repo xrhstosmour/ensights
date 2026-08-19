@@ -32,11 +32,11 @@ grid AS (
 SELECT
     -- Formatted only at output: the CTEs above do month arithmetic on the
     -- real timestamp, and ORDER BY below still uses that raw column.
-    TO_CHAR(grid.cohort_month, 'YYYY-MM-DD"T"HH24:MI:SS.MS') AS cohort_month,
-    grid.period_index,
-    grid.active_customers,
-    size.cohort_size,
-    ROUND(grid.active_customers::numeric / size.cohort_size, 4) AS retention_rate
+    TO_CHAR(grid.cohort_month, 'YYYY-MM-DD"T"HH24:MI:SS.MS') AS "Cohort Month",
+    grid.period_index                                        AS "Month Index",
+    grid.active_customers                                    AS "Active Customers",
+    size.cohort_size                                         AS "Cohort Size",
+    ROUND(grid.active_customers::numeric / size.cohort_size, 4) AS "Retention"
 FROM grid
 JOIN (
     SELECT cohort_month, active_customers AS cohort_size
