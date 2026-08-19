@@ -69,7 +69,16 @@ date filters; accept, and the clause is only applied when a value is supplied.
 | `12_revenue_concentration.sql` | Revenue Concentration | `/growth-accounting` |
 
 Card names are short and capitalised, and so are the column headers, which the
-queries set with quoted aliases such as `AS "Stock Code"`. Naming them in SQL
+queries set with quoted aliases such as `AS "Stock Code"`.
+
+Every timestamp column is rendered as ISO 8601 text, `2010-12-09T20:01:00.000`,
+by the same `TO_CHAR` call in each query. One format everywhere means a date
+reads the same on every card, in 24 hour time, and sorts chronologically,
+because ISO 8601 sorts correctly as text. The stored columns are
+`timestamp without time zone` holding UTC, so nothing is converted on the way
+out and no offset is shown that could be misread as local time. Date filtering
+still works on the underlying column through the `[[AND ... {{start}}]]`
+clauses, which test the real timestamp rather than the formatted output. Naming them in SQL
 rather than in the Metabase interface means a re-created card comes back with
 the same headers instead of raw column names.
 

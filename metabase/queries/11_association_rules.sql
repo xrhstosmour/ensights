@@ -9,7 +9,8 @@ SELECT
     ROUND(rule.confidence::numeric, 4) AS "Confidence",
     ROUND(rule.lift::numeric, 4)       AS "Lift",
     rule.algorithm                     AS "Algorithm",
-    rule.computed_at                   AS "Computed At"
+    TO_CHAR(rule.computed_at, 'YYYY-MM-DD"T"HH24:MI:SS.MS')
+                                       AS "Computed At"
 FROM association_rules AS rule
 WHERE rule.deleted_at IS NULL
   AND rule.computed_at = (
