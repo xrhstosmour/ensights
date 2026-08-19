@@ -210,7 +210,7 @@ def classify_record(
         return MISSING_IDENTIFIER
 
     code = record.stock_code.strip().upper()
-    if code in non_product_codes or code.startswith("GIFT_"):
+    if code in non_product_codes:
         return NON_PRODUCT_CODE
 
     if record.quantity == 0:
