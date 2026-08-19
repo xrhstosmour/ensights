@@ -1,6 +1,6 @@
 # Ensights
 
-Master's thesis project — National and Kapodistrian University of Athens,
+Master's thesis project, National and Kapodistrian University of Athens,
 Department of Informatics and Telecommunications: **"Extraction of
 Intelligent Analytics from E-Commerce Data"**.
 
@@ -77,12 +77,12 @@ server, the containers keep running.
 The platform isn't tied to the Online Retail II dataset used in the thesis.
 Three ways to bring your own:
 
-1. **Push a batch** — `POST /api/v1/ingestion/transactions` with up to 5000
+1. **Push a batch**, `POST /api/v1/ingestion/transactions` with up to 5000
    lines. No code needed.
-2. **Point at a database** — describe which columns hold which field, a
+2. **Point at a database**, describe which columns hold which field, a
    background task streams rows in from any database SQLAlchemy can reach.
    No adapter to write, but it runs as a Celery task, not an HTTP call.
-3. **Write a file adapter** — for a layout that doesn't fit the above, the
+3. **Write a file adapter**, for a layout that doesn't fit the above, the
    way `app/ingestion/online_retail.py` does for the reference dataset.
 
 Full field-by-field rules are in
@@ -90,9 +90,9 @@ Full field-by-field rules are in
 
 ## Where to watch the results
 
-- **Swagger UI** — [http://localhost:8000/try](http://localhost:8000/try):
+- **Swagger UI**, [http://localhost:8000/try](http://localhost:8000/try):
   every endpoint below, with "Try it out".
-- **Metabase** — URL printed by `demo.sh`: 12 SQL cards mirroring the API
+- **Metabase**, URL printed by `demo.sh`: 12 SQL cards mirroring the API
   one-to-one, added by hand into 3 suggested dashboards (setup notes in
   [`metabase/README.md`](metabase/README.md)).
 
@@ -191,4 +191,4 @@ Output: `documents/<author>-thesis.pdf`, the file to hand over.
 
 ## License
 
-MIT License — see [LICENSE](LICENSE) file.
+MIT License, see [LICENSE](LICENSE) file.
