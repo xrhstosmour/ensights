@@ -18,8 +18,8 @@ SELECT
     )::int                                                      AS "Recency Days",
     COUNT(DISTINCT "order".id)                                  AS "Frequency",
     SUM(item.line_total)                                        AS "Monetary",
-    MIN("order".ordered_at)                                     AS "First Purchase",
-    MAX("order".ordered_at)                                     AS "Last Purchase"
+    TO_CHAR(MIN("order".ordered_at), 'YYYY-MM-DD"T"HH24:MI:SS.MS')       AS "First Purchase",
+    TO_CHAR(MAX("order".ordered_at), 'YYYY-MM-DD"T"HH24:MI:SS.MS')       AS "Last Purchase"
 FROM order_items AS item
 JOIN orders    AS "order"  ON "order".id = item.order_id
 JOIN customers AS customer ON customer.id = "order".customer_id
