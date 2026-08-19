@@ -17,6 +17,11 @@ Metabase runs as an optional service and is already wired up:
 docker compose up metabase  # http://localhost:3000
 ```
 
+Set **Admin, Localization, Number separators** to `.` alone, so numbers carry
+a dot for the decimal mark and no thousands separator at all: `379437.96`, not
+`379,437.96`. A grouping separator is the ambiguous part here, since a dot
+groups thousands in some conventions and marks the decimal in others.
+
 On first run, Metabase asks for a database to connect to. Use the read-only
 credentials `setup.sh` generated:
 
@@ -50,22 +55,28 @@ date filters; accept, and the clause is only applied when a value is supplied.
 
 | File | Card | Mirrors |
 | --- | --- | --- |
-| `01_top_products.sql` | Products with the highest sales | `/analytics/top-products` |
-| `02_top_customers.sql` | Customers with the most purchases | `/analytics/top-customers` |
-| `03_top_regions.sql` | Regions with the most sales | `/analytics/top-regions` |
-| `04_sales_over_time.sql` | When sales happen | `/analytics/sales-over-time` |
-| `05_sales_by_weekday.sql` | Which weekdays sell most | `/analytics/sales-by-weekday` |
-| `06_top_returned_products.sql` | Products with the most refunds | `/analytics/top-returned-products` |
-| `07_sales_by_price_band.sql` | Sales per price range | `/analytics/sales-by-price-band` |
-| `08_gross_merchandise_value.sql` | GMV, refunds and net value | `/business-metrics/gross-merchandise-value` |
-| `09_cohort_retention.sql` | Acquisition cohorts and retention | `/business-metrics/cohort-retention` |
-| `10_rfm.sql` | Recency, frequency, monetary | `/business-metrics/rfm` |
-| `11_association_rules.sql` | Products bought together | `/market-basket/rules` |
-| `12_revenue_concentration.sql` | Revenue concentration | `/growth-accounting` |
+| `01_top_products.sql` | Top Products | `/analytics/top-products` |
+| `02_top_customers.sql` | Top Customers | `/analytics/top-customers` |
+| `03_top_regions.sql` | Top Regions | `/analytics/top-regions` |
+| `04_sales_over_time.sql` | Sales Over Time | `/analytics/sales-over-time` |
+| `05_sales_by_weekday.sql` | Sales By Weekday | `/analytics/sales-by-weekday` |
+| `06_top_returned_products.sql` | Top Returns | `/analytics/top-returned-products` |
+| `07_sales_by_price_band.sql` | Price Bands | `/analytics/sales-by-price-band` |
+| `08_gross_merchandise_value.sql` | GMV And Refunds | `/business-metrics/gross-merchandise-value` |
+| `09_cohort_retention.sql` | Cohort Retention | `/business-metrics/cohort-retention` |
+| `10_rfm.sql` | RFM | `/business-metrics/rfm` |
+| `11_association_rules.sql` | Association Rules | `/market-basket/rules` |
+| `12_revenue_concentration.sql` | Revenue Concentration | `/growth-accounting` |
 
-## Suggested dashboards
+Card names are short and capitalised, and so are the column headers, which the
+queries set with quoted aliases such as `AS "Stock Code"`. Naming them in SQL
+rather than in the Metabase interface means a re-created card comes back with
+the same headers instead of raw column names.
 
-Three dashboards cover the ground without duplicating cards:
+## Dashboards
+
+Three dashboards cover the ground without duplicating cards. Splitting them
+this way also keeps each board small enough to take in at a glance:
 
 - **Sales**, 01, 03, 04, 05, 07. What sold, where and when.
 - **Customers**, 02, 09, 10, 12. Who bought, whether they came back, and how

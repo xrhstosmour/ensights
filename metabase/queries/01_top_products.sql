@@ -4,11 +4,11 @@
 -- expensive low-volume one answer different questions, and marketing spend
 -- follows value.
 SELECT
-    product.stock_code,
-    product.description,
-    SUM(item.quantity)                  AS units,
-    SUM(item.line_total)                AS revenue,
-    COUNT(DISTINCT item.order_id)       AS orders
+    product.stock_code               AS "Stock Code",
+    product.description              AS "Product",
+    SUM(item.quantity)                  AS "Units",
+    SUM(item.line_total)                AS "Revenue",
+    COUNT(DISTINCT item.order_id)       AS "Orders"
 FROM order_items AS item
 JOIN products AS product ON product.id = item.product_id
 JOIN orders   AS "order" ON "order".id = item.order_id
@@ -18,5 +18,5 @@ WHERE item.deleted_at IS NULL
   [[AND "order".ordered_at >= {{start}}]]
   [[AND "order".ordered_at <  {{end}}]]
 GROUP BY product.stock_code, product.description
-ORDER BY revenue DESC
+ORDER BY "Revenue" DESC
 LIMIT 20;

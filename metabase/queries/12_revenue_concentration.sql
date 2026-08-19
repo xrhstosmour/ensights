@@ -29,10 +29,10 @@ SELECT
         WHEN descending_rank < 0.20 THEN 'next 10% (to top 20%)'
         WHEN descending_rank < 0.50 THEN 'next 30% (to top 50%)'
         ELSE 'bottom 50%'
-    END                                                       AS segment,
-    COUNT(*)                                                  AS customers,
-    SUM(revenue)                                              AS revenue,
-    ROUND(SUM(revenue) / SUM(SUM(revenue)) OVER (), 4)        AS revenue_share
+    END                                                       AS "Segment",
+    COUNT(*)                                                  AS "Customers",
+    SUM(revenue)                                              AS "Revenue",
+    ROUND(SUM(revenue) / SUM(SUM(revenue)) OVER (), 4)        AS "Revenue Share"
 FROM ranked
-GROUP BY segment
-ORDER BY revenue DESC;
+GROUP BY "Segment"
+ORDER BY "Revenue" DESC;
