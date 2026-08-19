@@ -145,6 +145,12 @@ curl -H "Authorization: Bearer $TOKEN" \
 }
 ```
 
+The negative score here is the default run over every month. The dataset stops
+on 9 December 2011, so its final month holds nine days and reads as a collapse
+rather than a truncation. Chapter 7 excludes that period, and the same model
+then scores `+0.1421` against the baseline. The endpoint reports the honest
+number for whatever window it is given.
+
 **Nested customer segmentation.** Countries are clustered first, then each
 cluster is split again on purchasing behaviour. The silhouette score for every
 candidate number of clusters is returned, so the choice of `chosen_k` can be
@@ -201,7 +207,7 @@ would promote a rule whose right hand side is merely a popular product:
 
 ![Association rules mined from the Online Retail II dataset](documents/screenshots/metabase-association-rules.jpg)
 
-**Swagger UI** at `/try`, every endpoint with "Try it out":
+**Swagger UI** at `/try`. The analytics endpoints, with "Try it out" on each:
 
 ![Swagger UI listing the Ensights API](documents/screenshots/swagger-try.jpg)
 
