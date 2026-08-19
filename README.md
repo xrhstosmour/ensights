@@ -28,12 +28,13 @@ server, the containers keep running.
 ## Adding data
 
 The platform isn't tied to the Online Retail II dataset used in the thesis.
-Three ways to bring your own, no code required for the first two:
+Three ways to bring your own:
 
 1. **Push a batch** — `POST /api/v1/ingestion/transactions` with up to 5000
-   lines.
+   lines. No code needed.
 2. **Point at a database** — describe which columns hold which field, a
    background task streams rows in from any database SQLAlchemy can reach.
+   No adapter to write, but it runs as a Celery task, not an HTTP call.
 3. **Write a file adapter** — for a layout that doesn't fit the above, the
    way `app/ingestion/online_retail.py` does for the reference dataset.
 
@@ -44,8 +45,8 @@ Full field-by-field rules are in
 
 - **Swagger UI** — [http://localhost:8000/try](http://localhost:8000/try):
   every endpoint below, with "Try it out".
-- **Metabase** — URL printed by `demo.sh`: 12 pre-built dashboards mirroring
-  the API one-to-one (setup notes in
+- **Metabase** — URL printed by `demo.sh`: 12 SQL cards mirroring the API
+  one-to-one, added by hand into 3 suggested dashboards (setup notes in
   [`metabase/README.md`](metabase/README.md)).
 
 | Endpoint prefix | What it answers |
