@@ -48,9 +48,7 @@ _COLUMN_ALIASES: dict[str, tuple[str, ...]] = {
 #
 # They cannot be filtered by pattern. Some are numeric-looking and some real
 # products carry alphabetic codes (the DCGS range is genuine merchandise), so
-# the list is explicit. Gift vouchers are excluded too: they are a payment
-# instrument, and counting both the voucher and the goods it buys is double
-# counting.
+# the list is explicit.
 #
 # Pass `non_product_codes` to override this for a different merchant.
 NON_PRODUCT_STOCK_CODES = frozenset(
@@ -72,6 +70,15 @@ NON_PRODUCT_STOCK_CODES = frozenset(
         "TEST002",
     }
 )
+
+# Gift vouchers are excluded too: they are a payment instrument, and counting
+# both the voucher and the goods it buys is double counting. Unlike everything
+# above, their codes cannot be listed literally: this dataset appends a
+# variable denomination to each one (`gift_0001_20`, `gift_0001_50`, ...), so
+# they are matched by prefix instead. This is a property of this one dataset,
+# not a general rule, so the check lives here rather than in the shared
+# `normalisation.classify_record`, which every other source also calls.
+GIFT_VOUCHER_CODE_PREFIX = "GIFT_"
 
 _REQUIRED_FIELDS = (
     "order_number",
@@ -221,6 +228,13 @@ class OnlineRetailCSVAdapter(DataSourceAdapter):
                     # invoice number, alongside a negative quantity.
                     is_cancellation=order_number.upper().startswith("C"),
                 )
+
+                # Gift vouchers are this dataset's own quirk (see
+                # GIFT_VOUCHER_CODE_PREFIX), checked before the shared rules so
+                # it never affects any other source.
+                if stock_code.strip().upper().startswith(GIFT_VOUCHER_CODE_PREFIX):
+                    skip(normalisation.NON_PRODUCT_CODE)
+                    continue
 
                 # The remaining rules are shared with every other source, so a
                 # posted batch and a CSV export are judged identically.
