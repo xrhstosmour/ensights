@@ -191,9 +191,9 @@ quoted in chapter 7.
 All three are the running system over the complete Online Retail II dataset,
 both sheets, 39,516 orders spanning 2009 to 2011.
 
-**Metabase**, the sales overview dashboard:
+**Metabase**, the Sales dashboard. Three boards split the twelve cards, as `metabase/README.md` describes:
 
-![Metabase dashboard over the Online Retail II dataset](documents/screenshots/metabase-dashboard.png)
+![Metabase dashboard over the Online Retail II dataset](documents/screenshots/metabase-dashboard.jpg)
 
 **Frequent itemsets**, mined with FP-Growth and read back as association
 rules. Lift is the interesting column, since support and confidence alone
