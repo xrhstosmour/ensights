@@ -17,10 +17,11 @@ Metabase runs as an optional service and is already wired up:
 docker compose up metabase  # http://localhost:3000
 ```
 
-Set **Admin, Localization, Number separators** to `.` alone, so numbers carry
-a dot for the decimal mark and no thousands separator at all: `379437.96`, not
-`379,437.96`. A grouping separator is the ambiguous part here, since a dot
-groups thousands in some conventions and marks the decimal in others.
+Set **Admin, Localization, Number separators** to `,.`, a comma for the
+decimal mark and a dot for thousands, so a figure reads `379.437,96`. This is
+the Greek convention, and more to the point it is the one the manuscript
+itself uses, `39.516` orders and a MAPE of `38,48`. A reader comparing a
+dashboard figure against the thesis should not have to reparse the number.
 
 On first run, Metabase asks for a database to connect to. Use the read-only
 credentials `setup.sh` generated:
