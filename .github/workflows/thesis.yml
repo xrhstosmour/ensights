@@ -65,10 +65,12 @@ jobs:
           destination="documents/${author_slug:-thesis}-thesis.pdf"
           cp thesis/main.pdf "$destination"
 
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          # The container runs as a different user than the checkout owner.
+          # This must come first. The container runs as a different user than
+          # the checkout owner, so until the directory is trusted every other
+          # git command fails with "not in a git directory".
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
           if git diff --quiet -- "$destination"; then
             echo "Exported PDF already current, nothing to commit."
