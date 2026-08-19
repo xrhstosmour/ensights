@@ -17,6 +17,18 @@ cd "$PROJECT_DIR/thesis"
 ENGINE=local
 [ "${1:-}" = "--docker" ] && ENGINE=docker
 
+if [ "$ENGINE" = "local" ] && ! command -v latexmk >/dev/null 2>&1; then
+    error "latexmk not found, so there is no local TeX Live to build with.
+        Either install TeX Live with XeLaTeX and biber, or build in a
+        container instead, which needs no local TeX:
+
+          ./scripts/export-thesis.sh --docker"
+fi
+
+if [ "$ENGINE" = "docker" ] && ! docker info >/dev/null 2>&1; then
+    error "Docker is not running, start it and try again."
+fi
+
 info "Building thesis (ENGINE=${ENGINE})..."
 make ENGINE="$ENGINE" || error "Thesis build failed, check thesis/main.log"
 
