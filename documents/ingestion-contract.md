@@ -86,7 +86,7 @@ This applies uniformly across all three routes; the one exception is the
 Online Retail II adapter's own gift-voucher prefix check, scoped to that
 adapter alone because that dataset's voucher codes carry a variable
 denomination suffix (see `NON_PRODUCT_STOCK_CODES` in
-`app/ingestion/online_retail.py`) — it never affects your own data.
+`app/ingestion/online_retail.py`), it never affects your own data.
 
 ## Route 1: post a batch
 

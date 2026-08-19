@@ -11,13 +11,13 @@ codebase a generic FastAPI backend does not have.
 
 ## Repository layout beyond the backend
 
-- `thesis/` — the LaTeX manuscript (Greek, XeLaTeX + biber). Own `Makefile` and
+- `thesis/`, the LaTeX manuscript (Greek, XeLaTeX + biber). Own `Makefile` and
   own CI job, see `documents/roadmap.md` for how chapters pair with code.
-- `documents/` — project-level docs. `roadmap.md` is the source of truth for
+- `documents/`, project-level docs. `roadmap.md` is the source of truth for
   scope and sequencing; `methodology/` holds one note per analytical module,
   covering the judgement calls behind it and where it stops being trustworthy.
-- `notebooks/` — experiment notebooks backing the thesis figures and metrics.
-- `metabase/` — SQL cards mirroring the API, for dashboards. A card and its
+- `notebooks/`, experiment notebooks backing the thesis figures and metrics.
+- `metabase/`, SQL cards mirroring the API, for dashboards. A card and its
   endpoint must always return the same numbers.
 
 ## Upstream template

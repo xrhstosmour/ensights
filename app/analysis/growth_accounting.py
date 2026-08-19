@@ -9,12 +9,12 @@ The decomposition follows the quantitative product-market-fit framework
 popularised by Tribe Capital, adapted to retail. Per period, each customer's
 revenue falls into exactly one flow:
 
-* **new** — first revenue this customer has ever produced
-* **resurrected** — active again after at least one dormant period
-* **retained** — the part of last period's revenue that repeated
-* **expansion** — the increase on top of retained revenue
-* **contraction** — the decrease against last period, still active
-* **churned** — last period's revenue from a customer now dormant
+* **new**, first revenue this customer has ever produced
+* **resurrected**, active again after at least one dormant period
+* **retained**, the part of last period's revenue that repeated
+* **expansion**, the increase on top of retained revenue
+* **contraction**, the decrease against last period, still active
+* **churned**, last period's revenue from a customer now dormant
 
 These satisfy an identity that the tests assert directly:
 
