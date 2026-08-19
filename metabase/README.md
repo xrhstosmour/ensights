@@ -90,6 +90,32 @@ goods and no marketing spend, so profitability cannot be measured from it. The
 stated assumptions, and a dashboard tile stripped of those assumptions would be
 exactly the misreading the rest of the project works to avoid.
 
+## Why forecasting and clustering are not cards either
+
+A card is a SQL query, so a card can only show something the database already
+holds. Sales, returns, customers and regions are facts in the schema, and so
+are the mined itemsets and association rules, because the mining task writes
+its results back into `frequent_itemsets` and `association_rules`.
+
+Forecasts, customer segments, growth flows and unit economics are not facts in
+the schema. They are outputs of models that run in Python at request time,
+using statsmodels and scikit-learn, and nothing persists them. Reproducing a
+Holt-Winters forecast or a k-means segmentation in SQL would mean
+reimplementing the model in a second language, where it would drift from the
+one the thesis actually evaluates.
+
+So they stay where they are computed:
+
+| Question | Where to read it |
+| --- | --- |
+| Revenue forecast against a naive baseline | `GET /api/v1/forecasting/revenue` |
+| Nested customer and region segments | `GET /api/v1/segmentation` |
+| Revenue split into new, retained and churned | `GET /api/v1/growth-accounting` |
+| LTV, CAC and sensitivity grids | `GET /api/v1/profitability/*` |
+
+The notebooks under `notebooks/` read the same endpoints and models when a
+figure for the manuscript is needed.
+
 ## Keeping cards honest
 
 The queries are verified against a migrated database, and the ones with
