@@ -73,6 +73,34 @@ class TestStartRun:
         assert mock_delay.call_args.kwargs["tenant_id"] == str(SYSTEM_TENANT_ID)
 
     @pytest.mark.usefixtures("override_get_async_session")
+    async def test_start_run_does_not_swallow_dispatch_failures_as_400(
+        self, client: AsyncClient, session: AsyncSession
+    ) -> None:
+        """`FrequentItemsetError` only ever happens inside the worker.
+
+        `.delay()` cannot raise it, so the endpoint must not catch it as if
+        it could, that would misrepresent an unrelated dispatch failure as
+        an invalid-input 400.
+        """
+        from app.services.market_basket_service import FrequentItemsetError
+
+        auth_service = _auth_service(session)
+        superuser = await _create_superuser(auth_service, tenant_id=SYSTEM_TENANT_ID)
+        token = create_access_token(subject=superuser.id)
+
+        with (
+            patch(
+                "app.tasks.market_basket.mine_market_baskets_task.delay",
+                side_effect=FrequentItemsetError("boom"),
+            ),
+            pytest.raises(FrequentItemsetError),
+        ):
+            await client.post(
+                "/api/v1/market-basket/runs",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+
+    @pytest.mark.usefixtures("override_get_async_session")
     async def test_start_run_requires_superuser(
         self, client: AsyncClient, session: AsyncSession
     ) -> None:
