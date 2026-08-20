@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core import SYSTEM_TENANT_ID
 from app.core.tenant import tenant_context
 from app.ingestion.online_retail import OnlineRetailCSVAdapter
+from app.repositories.base import TenantContextRequiredError
 from app.services.growth_accounting_service import GrowthAccountingService
 from app.services.growth_accounting_service import InvalidActivityError
 from app.services.ingestion_service import IngestionService
@@ -78,6 +79,16 @@ class TestGrowthAccountingService:
         # No customer appears twice in the same period.
         keys = [(row["customer"], row["period"]) for row in rows]
         assert len(keys) == len(set(keys))
+
+    @pytest.mark.anyio
+    async def test_activity_raises_without_tenant_context(
+        self, session: AsyncSession
+    ) -> None:
+        """No tenant context should raise, not return every tenant's rows."""
+        service = GrowthAccountingService(session)
+
+        with tenant_context(None), pytest.raises(TenantContextRequiredError):
+            await service.activity(granularity="month")
 
     @pytest.mark.anyio
     async def test_decomposition_covers_every_month(

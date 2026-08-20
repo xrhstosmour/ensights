@@ -21,11 +21,13 @@ from sqlalchemy import select
 from sqlmodel import col
 
 from app.core.tenant import get_current_tenant_id
+from app.core.tenant import is_system_access
 from app.models.customer import Customer
 from app.models.order import Order
 from app.models.order_item import OrderItem
 from app.models.product_return import ProductReturn
 from app.models.region import Region
+from app.repositories.base import TenantContextRequiredError
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -51,8 +53,20 @@ class BusinessMetricsRepository:
 
         Returns:
             The constrained query.
+
+        Raises:
+            TenantContextRequiredError: If no tenant context is set and
+                `system_context()` is not active. Running the query
+                unfiltered would silently merge every tenant's rows.
         """
         tenant_id = get_current_tenant_id()
+        if tenant_id is None and not is_system_access():
+            message = (
+                "Business metrics query is tenant-scoped, but no tenant "
+                "context is set. Set one with tenant_context(...), or wrap "
+                "deliberate cross-tenant access in system_context()."
+            )
+            raise TenantContextRequiredError(message)
         for model in models:
             query = query.where(model.deleted_at.is_(None))
             if tenant_id is not None:
