@@ -17,6 +17,7 @@ logger = get_logger("tasks.ingestion")
     name="app.tasks.ingestion.import_online_retail",
     max_retries=1,
     default_retry_delay=60,
+    autoretry_for=(Exception,),
 )
 def import_online_retail_task(self, path: str, tenant_id: str | None = None) -> dict:
     """Import an Online Retail II CSV export into the canonical schema.
@@ -60,7 +61,11 @@ def import_online_retail_task(self, path: str, tenant_id: str | None = None) -> 
             "regions_created": summary.regions_created,
         }
 
-    return asyncio.run(_run())
+    try:
+        return asyncio.run(_run())
+    except Exception as e:
+        logger.error("online_retail_import_failed", error=str(e))
+        raise self.retry(exc=e) from e
 
 
 @celery_app.task(
@@ -127,4 +132,8 @@ def import_sql_source_task(
             "regions_created": summary.regions_created,
         }
 
-    return asyncio.run(_run())
+    try:
+        return asyncio.run(_run())
+    except Exception as e:
+        logger.error("sql_source_import_failed", error=str(e))
+        raise self.retry(exc=e) from e
