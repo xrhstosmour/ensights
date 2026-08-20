@@ -12,6 +12,7 @@ from app.analysis.frequent_itemsets import APRIORI
 from app.core import SYSTEM_TENANT_ID
 from app.core.tenant import tenant_context
 from app.ingestion.online_retail import OnlineRetailCSVAdapter
+from app.repositories.base import TenantContextRequiredError
 from app.services.ingestion_service import IngestionService
 from app.services.market_basket_service import InvalidMiningParametersError
 from app.services.market_basket_service import MarketBasketService
@@ -76,6 +77,16 @@ class TestMarketBasketService:
 
         assert len(baskets) == 5
         assert sorted(len(basket) for basket in baskets) == [2, 2, 3, 3, 4]
+
+    @pytest.mark.anyio
+    async def test_build_baskets_raises_without_tenant_context(
+        self, session: AsyncSession
+    ) -> None:
+        """No tenant context should raise, not return every tenant's rows."""
+        service = MarketBasketService(session)
+
+        with tenant_context(None), pytest.raises(TenantContextRequiredError):
+            await service.build_baskets()
 
     @pytest.mark.anyio
     async def test_single_line_orders_are_excluded(self, session: AsyncSession) -> None:

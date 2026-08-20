@@ -22,9 +22,11 @@ from app.analysis.growth_accounting import InvalidActivityError
 from app.analysis.growth_accounting import analyse
 from app.core.logging import get_logger
 from app.core.tenant import get_current_tenant_id
+from app.core.tenant import is_system_access
 from app.models.customer import Customer
 from app.models.order import Order
 from app.models.order_item import OrderItem
+from app.repositories.base import TenantContextRequiredError
 
 if TYPE_CHECKING:
     from datetime import datetime
@@ -62,8 +64,20 @@ class GrowthAccountingService:
 
         Returns:
             The constrained query.
+
+        Raises:
+            TenantContextRequiredError: If no tenant context is set and
+                `system_context()` is not active. Running the query
+                unfiltered would silently merge every tenant's rows.
         """
         tenant_id = get_current_tenant_id()
+        if tenant_id is None and not is_system_access():
+            message = (
+                "Growth accounting query is tenant-scoped, but no tenant "
+                "context is set. Set one with tenant_context(...), or wrap "
+                "deliberate cross-tenant access in system_context()."
+            )
+            raise TenantContextRequiredError(message)
         for model in models:
             query = query.where(model.deleted_at.is_(None))
             if tenant_id is not None:
