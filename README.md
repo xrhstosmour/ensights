@@ -178,7 +178,7 @@ dataset has no costs and no marketing spend, so this is a scenario over stated
 assumptions and the response says so itself:
 
 ```json
-{"average_customer_revenue": 2046.66, "lifetime_value": 1023.33,
+{"average_customer_revenue": 2895.0, "lifetime_value": 1447.5,
  "assumptions": {"gross_margin": 0.5, "customer_acquisition_cost": 0.0},
  "disclaimer": "Scenario output, not a measurement. The source data contains no cost of goods and no marketing spend, so these figures follow from the stated assumptions and hold only insofar as those assumptions do."}
 ```
