@@ -24,6 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core import SYSTEM_TENANT_ID
 from app.core.tenant import tenant_context
 from app.ingestion.online_retail import OnlineRetailCSVAdapter
+from app.repositories.base import TenantContextRequiredError
 from app.services.business_metrics_service import BusinessMetricsService
 from app.services.business_metrics_service import InvalidGranularityError
 from app.services.business_metrics_service import InvalidReportingWindowError
@@ -88,6 +89,16 @@ class TestGrossMerchandiseValue:
         assert [row["period"].month for row in rows] == [12, 1, 2]
         # December: 10 x 2.00 plus 5 x 4.00.
         assert rows[0]["gross_merchandise_value"] == Decimal("40.0000")
+
+    @pytest.mark.anyio
+    async def test_gmv_raises_without_tenant_context(
+        self, session: AsyncSession
+    ) -> None:
+        """No tenant context should raise, not return every tenant's rows."""
+        service = BusinessMetricsService(session)
+
+        with tenant_context(None), pytest.raises(TenantContextRequiredError):
+            await service.gross_merchandise_value(granularity="month")
 
     @pytest.mark.anyio
     async def test_refunds_are_reported_beside_gross_not_inside_it(

@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core import SYSTEM_TENANT_ID
 from app.core.tenant import tenant_context
 from app.ingestion.online_retail import OnlineRetailCSVAdapter
+from app.repositories.base import TenantContextRequiredError
 from app.services.analytics_service import AnalyticsService
 from app.services.analytics_service import InvalidGranularityError
 from app.services.analytics_service import InvalidReportingWindowError
@@ -85,6 +86,16 @@ class TestDescriptiveAnalytics:
         # 22086 sells 80 units at 2.55 on one invoice plus 1 more later.
         assert rows[0]["stock_code"] == "22086"
         assert rows[0]["units"] == 81
+
+    @pytest.mark.anyio
+    async def test_top_products_raises_without_tenant_context(
+        self, session: AsyncSession
+    ) -> None:
+        """No tenant context should raise, not return every tenant's rows."""
+        service = AnalyticsService(session)
+
+        with tenant_context(None), pytest.raises(TenantContextRequiredError):
+            await service.top_products()
 
     @pytest.mark.anyio
     async def test_top_customers_excludes_anonymous_sales(
