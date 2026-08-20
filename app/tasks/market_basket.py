@@ -17,6 +17,7 @@ logger = get_logger("tasks.market_basket")
     name="app.tasks.market_basket.mine_market_baskets",
     max_retries=1,
     default_retry_delay=60,
+    autoretry_for=(Exception,),
 )
 def mine_market_baskets_task(
     self,
@@ -78,4 +79,8 @@ def mine_market_baskets_task(
             "rules": len(result.rules),
         }
 
-    return asyncio.run(_run())
+    try:
+        return asyncio.run(_run())
+    except Exception as e:
+        logger.error("market_basket_mining_failed", error=str(e))
+        raise self.retry(exc=e) from e
