@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core import SYSTEM_TENANT_ID
 from app.core.tenant import tenant_context
 from app.ingestion.online_retail import OnlineRetailCSVAdapter
+from app.repositories.base import TenantContextRequiredError
 from app.services.ingestion_service import IngestionService
 from app.services.segmentation_service import SegmentationService
 
@@ -81,6 +82,16 @@ class TestSegmentationService:
                 "customers",
                 "active_months",
             }
+
+    @pytest.mark.anyio
+    async def test_region_features_raises_without_tenant_context(
+        self, session: AsyncSession
+    ) -> None:
+        """No tenant context should raise, not return every tenant's rows."""
+        service = SegmentationService(session)
+
+        with tenant_context(None), pytest.raises(TenantContextRequiredError):
+            await service.region_features()
 
     @pytest.mark.anyio
     async def test_active_months_distinguishes_steady_from_spiky_regions(
