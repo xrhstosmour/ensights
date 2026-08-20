@@ -156,9 +156,6 @@ The fourteen are delivered. Since then:
 | Appendices: code excerpts and the full sensitivity grid | Α, Β |
 | All eighteen figures, generated from the imported dataset | 4-7 |
 
-What remains needs the user, not code: `\thesismonth` in
-`thesis/metadata.tex`, and confirmation of who signs as head of department.
-
 ## Rules
 
 - **CI green before merge**, every PR, both the backend job and, when `thesis/`
