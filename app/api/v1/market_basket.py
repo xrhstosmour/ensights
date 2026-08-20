@@ -11,7 +11,6 @@ from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter
-from fastapi import HTTPException
 from fastapi import Query
 from fastapi import status
 
@@ -21,7 +20,6 @@ from app.dependencies import SessionDependency
 from app.dependencies import SuperuserUser
 from app.schemas.market_basket import AssociationRuleRow
 from app.schemas.market_basket import MiningRunAccepted
-from app.services.market_basket_service import FrequentItemsetError
 from app.services.market_basket_service import MarketBasketService
 
 router = APIRouter(prefix="/market-basket", tags=["Market Basket"])
@@ -66,7 +64,13 @@ async def association_rules(
     summary="Start a mining run",
     description=(
         "Queues a market basket analysis. Mining scans every order, so the "
-        "work is handed to a background worker rather than held on the request."
+        "work is handed to a background worker rather than held on the "
+        "request. Only the shape of the parameters is checked here; mining "
+        "failures, including an invalid algorithm or threshold combination, "
+        "happen on the worker and are not reported back through this "
+        "response. Poll the returned task id against the Celery result "
+        "backend, or check the worker logs, to learn whether a run "
+        "succeeded."
     ),
 )
 async def start_run(
@@ -80,6 +84,14 @@ async def start_run(
 ) -> MiningRunAccepted:
     """Queue a market basket analysis.
 
+    Only the request's own shape is validated synchronously, through the
+    `Query` constraints on `algorithm`, `minimum_support`, and
+    `minimum_confidence`. Dispatching to the worker with `.delay()` only
+    enqueues the task; it cannot raise a `FrequentItemsetError` that later
+    occurs inside the worker process, so mining failures are never reported
+    as an HTTP error from this endpoint. Callers must track the returned
+    task id through the Celery result backend or worker logs instead.
+
     Args:
         _superuser: Authenticated superuser.
         algorithm: Either "apriori" or "fpgrowth".
@@ -91,25 +103,17 @@ async def start_run(
 
     Returns:
         The queued task's identifier.
-
-    Raises:
-        HTTPException: 400 when the parameters are invalid.
     """
     from app.tasks.market_basket import mine_market_baskets_task
 
-    try:
-        task = mine_market_baskets_task.delay(
-            algorithm=algorithm,
-            minimum_support=minimum_support,
-            minimum_confidence=minimum_confidence,
-            maximum_itemset_size=maximum_itemset_size,
-            start=start.isoformat() if start else None,
-            end=end.isoformat() if end else None,
-            tenant_id=str(_superuser.tenant_id) if _superuser.tenant_id else None,
-        )
-    except FrequentItemsetError as error:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)
-        ) from error
+    task = mine_market_baskets_task.delay(
+        algorithm=algorithm,
+        minimum_support=minimum_support,
+        minimum_confidence=minimum_confidence,
+        maximum_itemset_size=maximum_itemset_size,
+        start=start.isoformat() if start else None,
+        end=end.isoformat() if end else None,
+        tenant_id=str(_superuser.tenant_id) if _superuser.tenant_id else None,
+    )
 
     return MiningRunAccepted(task_id=str(task.id))
