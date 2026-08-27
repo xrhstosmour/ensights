@@ -5,11 +5,17 @@
 -- acquisition, so 0 is the cohort's own month. The grid is triangular by
 -- construction: newer cohorts have had fewer months to come back.
 WITH activity AS (
+    -- Joined to order_items, and not read from orders alone, because the
+    -- endpoint counts a customer active in a month only when a surviving
+    -- line sold in it. An order whose lines were all soft-deleted would
+    -- otherwise count here and not there.
     SELECT DISTINCT
         "order".customer_id,
         DATE_TRUNC('month', "order".ordered_at) AS activity_month
     FROM orders AS "order"
+    JOIN order_items AS item ON item.order_id = "order".id
     WHERE "order".deleted_at IS NULL
+      AND item.deleted_at IS NULL
       AND "order".customer_id IS NOT NULL
 ),
 first_purchase AS (
