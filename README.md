@@ -65,18 +65,117 @@ disclaimer with it.
 
 ## Setup & run
 
-Needs [uv](https://docs.astral.sh/uv/getting-started/installation/) and
-[Docker](https://docs.docker.com/engine/install/).
+### 1. Prerequisites
+
+[uv](https://docs.astral.sh/uv/getting-started/installation/) and
+[Docker](https://docs.docker.com/engine/install/), both running.
+
+One thing to know before starting: the infrastructure containers are named
+globally, `postgresql`, `redis`, `rabbitmq`, `metabase`, and they publish
+5432, 6379, 5672 and 3000 on the host. Another project generated from the same
+template cannot run at the same time, and the symptom is not obvious, the
+second stack silently attaches to the first one's database. Stop the other one
+with `docker compose down` in its directory first.
+
+### 2. Install and provision
 
 ```bash
-./scripts/setup.sh  # first time only
-./scripts/demo.sh   # every time after
+./scripts/setup.sh
 ```
 
-`demo.sh` starts every service (Postgres, Redis, RabbitMQ, Metabase), applies
-migrations, seeds demo data, prints the API and Metabase URLs plus the demo
-login, then runs the API server in the foreground. `Ctrl+C` stops the API
-server, the containers keep running.
+Installs dependencies, generates every secret into `.env`, creates the TLS
+certificates, starts Postgres and Redis, applies migrations, and creates the
+superuser plus the `metabase_readonly` role. First time only.
+
+### 3. Start everything
+
+```bash
+./scripts/demo.sh
+```
+
+Starts Postgres, Redis, RabbitMQ and Metabase, applies migrations, seeds a
+synthetic demo dataset if the database is empty, mines the market baskets,
+waits for Metabase to actually answer, prints the URLs and the demo login,
+then runs the API server in the foreground. `Ctrl+C` stops the API server, the
+containers keep running. Re-running it is safe and will not duplicate data.
+
+The seed is synthetic, roughly 2800 orders over 24 months. It exists so every
+endpoint and every dashboard card has something to show on a first run. Its
+figures are invented, see step 7 for the real dataset.
+
+### 4. Get a token
+
+Every analytical endpoint needs one. The easiest route is
+[http://localhost:8000/try](http://localhost:8000/try), which has an
+**Authorize** button. From the shell:
+
+```bash
+TOKEN=$(curl -s -X POST http://localhost:8000/api/v1/auth/login \
+  --data-urlencode "username=admin@ensights.com" \
+  --data-urlencode "password=$(grep -m1 ^FIRST_SUPERUSER_PASSWORD= .env | cut -d= -f2-)" \
+  | python3 -c "import json,sys; print(json.load(sys.stdin)['access_token'])")
+
+curl -H "Authorization: Bearer $TOKEN" \
+  "http://localhost:8000/api/v1/business-metrics/customer-summary"
+```
+
+The login endpoint takes form fields, not JSON, and `username` is the email.
+
+### 5. Check that it all works
+
+In a second terminal, while `demo.sh` holds the first:
+
+```bash
+./scripts/verify.sh
+```
+
+It logs in, calls every analytical endpoint and fails if any returns an error
+**or** an empty payload, checks that Metabase is serving, and runs all twelve
+dashboard cards as `metabase_readonly` against the live database. Anything
+broken is named with the command to investigate it.
+
+### 6. Set up the Metabase dashboards
+
+Metabase starts empty, and its cards are added by hand once. Open
+[http://localhost:3000](http://localhost:3000), create the admin account, and
+when it asks for a database to analyse use the read-only credentials `setup.sh`
+generated: host `postgresql`, port `5432`, database and password from
+`POSTGRESQL_DATABASE` and `METABASE_READ_ONLY_PASSWORD` in `.env`, username
+`metabase_readonly`.
+
+Then follow [`metabase/README.md`](metabase/README.md), which lists the twelve
+queries, the three dashboards they belong to, and the number-separator setting
+that makes the figures read the way the manuscript writes them.
+
+### 7. Load the real dataset, to reproduce the thesis
+
+The demo seed is synthetic and its numbers match nothing in the manuscript.
+Download the [Online Retail II
+dataset](https://archive.ics.uci.edu/dataset/502/online+retail+ii), export both
+sheets to CSV, then import each one:
+
+```bash
+uv run --env-file .env python -c "
+import asyncio
+from app.core import SYSTEM_TENANT_ID
+from app.core.tenant import set_current_tenant_id
+from app.database import async_session_factory
+from app.ingestion.online_retail import OnlineRetailCSVAdapter
+from app.services.ingestion_service import IngestionService
+
+async def main():
+    set_current_tenant_id(SYSTEM_TENANT_ID)
+    async with async_session_factory() as session:
+        print(await IngestionService(session).import_from(
+            OnlineRetailCSVAdapter('online_retail_II.csv')))
+
+asyncio.run(main())
+"
+```
+
+Re-run `scripts/seed_demo.py` afterwards to re-mine the baskets over the new
+data. Skip the synthetic seed entirely by importing before the first
+`demo.sh`, since it only seeds when the database has no orders.
 
 ## Adding data
 
@@ -98,9 +197,11 @@ Full field-by-field rules are in
 
 - **Swagger UI**, [http://localhost:8000/try](http://localhost:8000/try):
   every endpoint below, with "Try it out".
-- **Metabase**, URL printed by `demo.sh`: 12 SQL cards mirroring the API
-  one-to-one, added by hand into 3 suggested dashboards (setup notes in
+- **Metabase**, URL printed by `demo.sh`: 12 SQL cards over the same facts the
+  API reads, added by hand into 3 suggested dashboards (setup notes in
   [`metabase/README.md`](metabase/README.md)).
+- **`./scripts/verify.sh`**: proves both of the above are actually answering
+  with data.
 
 | Endpoint prefix | What it answers |
 | --- | --- |
@@ -186,7 +287,8 @@ assumptions and the response says so itself:
 ## Reproducing the thesis figures
 
 The manuscript's numbers come from this code and the public dataset, so they
-can be checked. Importing Online Retail II and calling
+can be checked. This needs the real dataset, step 7 above, not the synthetic
+demo seed. Importing Online Retail II and calling
 `/api/v1/business-metrics/customer-summary` returns 4234 repeat customers
 against 1618 one time customers, a repeat purchase rate of 72.4%, 6.25 orders
 per customer and an average order value of 493.63, which are the figures
