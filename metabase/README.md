@@ -17,6 +17,11 @@ Metabase runs as an optional service and is already wired up:
 docker compose up metabase  # http://localhost:3000
 ```
 
+`./scripts/demo.sh` does both, and waits for Metabase to answer before printing
+its URL. Metabase migrates its own application database on first boot, which
+takes a couple of minutes, and its container declares no health check, so a
+container that is up is not yet a Metabase that is serving.
+
 Set **Admin, Localization, Number separators** to `,.`, a comma for the
 decimal mark and a dot for thousands, so a figure reads `379.437,96`. This is
 the Greek convention, and more to the point it is the one the manuscript
@@ -139,7 +144,29 @@ figure for the manuscript is needed.
 
 ## Keeping cards honest
 
-The queries are verified against a migrated database, and the ones with
-non-trivial logic are cross-checked against the API on seeded data, so a card
-and its endpoint return the same numbers. If you change a card, re-check it
-against its endpoint rather than trusting that it still agrees.
+`./scripts/verify.sh` runs every file in `queries/` as `metabase_readonly`
+against the live database and fails if one errors or comes back empty, and it
+calls each mirrored endpoint in the same pass. Run it after changing a card
+rather than trusting that the card still agrees.
+
+What it does not do is diff a card's rows against its endpoint's response
+field by field. The two are checked to work over the same data, not proved
+identical, so a card whose logic drifts can still pass. Comparing the numbers
+themselves is a manual step.
+
+Three things the cards do differently from the endpoints, by design rather
+than by oversight:
+
+- **The cards carry no `tenant_id` predicate.** Every endpoint is
+  tenant-scoped, and `AnalyticsRepository._scope` raises rather than run
+  unfiltered. A card aggregates across every tenant, so on a single-tenant
+  database the numbers match and on a multi-tenant one they will not, and the
+  dashboard would show another tenant's revenue. Give each card a tenant
+  filter before pointing Metabase at a shared instance.
+- **Row limits differ.** Cards 01, 02 and 06 use `LIMIT 20` and card 11 uses
+  `LIMIT 50`, against endpoint defaults of 10 and 20; card 03 has no limit at
+  all. The rows are the same, there are just more of them.
+- **Only 01 to 07 have date filters.** Cards 08 to 12 have no
+  `[[AND ... {{start}}]]` clauses, though `gross-merchandise-value`,
+  `cohort-retention`, `rfm` and `growth-accounting` all accept `start` and
+  `end`.
