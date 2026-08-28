@@ -2,21 +2,23 @@
 # TODO: Add extra performance configuration, using https://pgtune.leopard.in.ua/#/.
 networks:
   internal:
-    name: "internal"
-    # External means the container will be accessible from other containers in the same network.
-    # If you want to isolate the container create a new network, with different name for each container and without being external.
-    external: true
+    name: "ensights-internal"
 
 volumes:
   postgresql:
-    name: "postgresql"
+    name: "ensights-postgresql"
 
 services:
   postgresql:
     image: "postgres:16-alpine"
-    container_name: "postgresql"
+    container_name: "ensights-postgresql"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER}"]
+      # The port is interpolated by Compose, the same way `command` below does
+      # it, because the server is told to listen on POSTGRESQL_PORT while
+      # `pg_isready` would otherwise probe its own default of 5432. On any
+      # other port the container never reports healthy, and every
+      # `depends_on: service_healthy` waiting on it stalls until it times out.
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -p ${POSTGRESQL_PORT?Variable not set}"]
       interval: "5s"
       timeout: "5s"
       retries: 5

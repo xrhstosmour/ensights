@@ -5,19 +5,26 @@ from __future__ import annotations
 from unittest.mock import ANY
 from unittest.mock import MagicMock
 from unittest.mock import patch
+from uuid import UUID
 
 import pytest
 from botocore.exceptions import ClientError
 
+from app.core import SYSTEM_TENANT_ID
 from app.core.storage import _build_thumbnail
 from app.core.storage import _ensure_bucket
 from app.core.storage import _s3_client
+from app.core.storage import build_object_key
 from app.core.storage import delete_object
 from app.core.storage import download_object
 from app.core.storage import get_download_url
 from app.core.storage import is_thumbnailable
 from app.core.storage import upload_file
 from app.core.storage import upload_object
+from app.core.tenant import tenant_context
+
+# Object keys name the uploader, so every call needs one.
+UPLOADER = UUID("00000000-0000-0000-0000-0000000000b1")
 
 
 def _client_error(code: str, operation_name: str = "HeadBucket") -> ClientError:
@@ -52,6 +59,7 @@ class TestUploadFile:
         object_key, content_hash = await upload_file(
             content=content,
             mimetype="text/plain",
+            uploaded_by=UPLOADER,
         )
 
         assert (
@@ -68,9 +76,89 @@ class TestUploadFile:
         """Should create bucket on first upload."""
         mock_s3_client.head_bucket.side_effect = _client_error("404")
 
-        await upload_file(content=b"test", mimetype="text/plain")
+        await upload_file(content=b"test", mimetype="text/plain", uploaded_by=UPLOADER)
 
         mock_s3_client.create_bucket.assert_called_once()
+
+
+class TestObjectKeyNamespacing:
+    """Object keys must name both the tenant and the uploader.
+
+    Deduplication is per uploader (see the `File` model docstring), so
+    every distinct uploader of identical bytes owns a row with its own
+    reference count. On a shared key, the first of them to reach zero
+    purges the object out from under the rest, whose downloads then 404.
+    """
+
+    FIRST_TENANT = UUID("00000000-0000-0000-0000-0000000000a1")
+    SECOND_TENANT = UUID("00000000-0000-0000-0000-0000000000a2")
+    FIRST_UPLOADER = UUID("00000000-0000-0000-0000-0000000000b1")
+    SECOND_UPLOADER = UUID("00000000-0000-0000-0000-0000000000b2")
+
+    @pytest.mark.asyncio
+    async def test_identical_content_gets_a_key_per_tenant(self) -> None:
+        """Two tenants uploading the same bytes get two distinct objects."""
+        content = b"content uploaded by two tenants"
+
+        with tenant_context(self.FIRST_TENANT):
+            first_key, first_hash = await upload_file(
+                content=content,
+                mimetype="text/plain",
+                uploaded_by=self.FIRST_UPLOADER,
+            )
+        with tenant_context(self.SECOND_TENANT):
+            second_key, second_hash = await upload_file(
+                content=content,
+                mimetype="text/plain",
+                uploaded_by=self.FIRST_UPLOADER,
+            )
+
+        assert first_hash == second_hash
+        assert first_key != second_key
+        assert (
+            first_key
+            == f"uploads/{self.FIRST_TENANT}/{self.FIRST_UPLOADER}/{first_hash}"
+        )
+        assert (
+            second_key
+            == f"uploads/{self.SECOND_TENANT}/{self.FIRST_UPLOADER}/{second_hash}"
+        )
+
+    @pytest.mark.asyncio
+    async def test_identical_content_gets_a_key_per_uploader(self) -> None:
+        """Two colleagues uploading the same bytes get two distinct objects."""
+        content = b"content uploaded by two colleagues"
+
+        with tenant_context(self.FIRST_TENANT):
+            first_key, first_hash = await upload_file(
+                content=content,
+                mimetype="text/plain",
+                uploaded_by=self.FIRST_UPLOADER,
+            )
+            second_key, second_hash = await upload_file(
+                content=content,
+                mimetype="text/plain",
+                uploaded_by=self.SECOND_UPLOADER,
+            )
+
+        assert first_hash == second_hash
+        assert first_key != second_key
+
+    def test_falls_back_to_the_system_tenant_without_context(self) -> None:
+        """No tenant context keys under `SYSTEM_TENANT_ID`, as rows do."""
+        with tenant_context(None):
+            key = build_object_key("uploads", "abc123", self.FIRST_UPLOADER)
+
+        assert key == f"uploads/{SYSTEM_TENANT_ID}/{self.FIRST_UPLOADER}/abc123"
+
+    def test_explicit_tenant_wins_over_the_context(self) -> None:
+        """A passed tenant is used even when a different one is in context."""
+        with tenant_context(self.FIRST_TENANT):
+            key = build_object_key(
+                "thumbnails", "abc123", self.FIRST_UPLOADER, self.SECOND_TENANT
+            )
+
+        assert key == f"thumbnails/{self.SECOND_TENANT}/{self.FIRST_UPLOADER}/abc123"
 
 
 class TestGetDownloadUrl:

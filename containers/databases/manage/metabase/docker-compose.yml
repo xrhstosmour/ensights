@@ -1,18 +1,26 @@
 networks:
   internal:
-    name: "internal"
-    # External means the container will be accessible from other containers in the same network.
-    # If you want to isolate the container create a new network, with different name for each container and without being external.
-    external: true
+    name: "ensights-internal"
 
 volumes:
   metabase:
-    name: "metabase"
+    name: "ensights-metabase"
 
 services:
   metabase:
     image: "metabase/metabase:v0.62.17"
-    container_name: "metabase"
+    container_name: "ensights-metabase"
+    # Metabase migrates its own application database on first boot, which takes
+    # a couple of minutes, so a container that is up is not yet a Metabase that
+    # serves. Without this, anything downstream can only see the container
+    # state, and a boot that crash-loops on the application database looks
+    # exactly like one that is still starting.
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS -I http://localhost:3000/api/health || exit 1"]
+      interval: "15s"
+      timeout: "5s"
+      retries: 10
+      start_period: "180s"
     restart: "unless-stopped"
     entrypoint:
       - "sh"
