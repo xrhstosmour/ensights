@@ -13,32 +13,29 @@
 #    cluster mode.
 networks:
   internal:
-    name: "internal"
-    # External means the container will be accessible from other containers in the same local network.
-    # If you want to isolate the container create a new network, with different name for each container and without being external.
-    external: true
+    name: "ensights-internal"
 
 volumes:
   redis:
-    name: "redis"
+    name: "ensights-redis"
   redis-cluster-node-1:
-    name: "redis-cluster-node-1"
+    name: "ensights-redis-cluster-node-1"
   redis-cluster-node-2:
-    name: "redis-cluster-node-2"
+    name: "ensights-redis-cluster-node-2"
   redis-cluster-node-3:
-    name: "redis-cluster-node-3"
+    name: "ensights-redis-cluster-node-3"
   redis-cluster-node-4:
-    name: "redis-cluster-node-4"
+    name: "ensights-redis-cluster-node-4"
   redis-cluster-node-5:
-    name: "redis-cluster-node-5"
+    name: "ensights-redis-cluster-node-5"
   redis-cluster-node-6:
-    name: "redis-cluster-node-6"
+    name: "ensights-redis-cluster-node-6"
 
 services:
   # Standalone Redis (default, no profile needed).
   redis:
     image: "redis:7.4-alpine"
-    container_name: "redis"
+    container_name: "ensights-redis"
     # Explaination of the command:
     # --appendonly yes: This enables AOF persistence, which logs every write operation. It offers a better durability guarantee compared to RDB alone, as you can survive crashes with minimal data loss.
     # --auto-aof-rewrite-min-size: The minimum size of the AOF file before Redis will consider rewriting it. This is useful to prevent Redis from rewriting the AOF file too often.
@@ -48,7 +45,7 @@ services:
     # --maxclients: Limits the number of simultaneous connections to Redis.
     command: "redis-server --appendonly yes --auto-aof-rewrite-percentage ${REDIS_AOF_REWRITE_PERCENTAGE?Variable not set} --auto-aof-rewrite-min-size ${REDIS_AOF_REWRITE_MINIMUM_SIZE?Variable not set} --maxmemory ${REDIS_MAXIMUM_MEMORY?Variable not set} --maxmemory-policy volatile-lru --maxclients ${REDIS_MAXIMUM_CLIENTS?Variable not set} --requirepass ${REDIS_PASSWORD?Variable not set} --port ${REDIS_PORT?Variable not set}"
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD?Variable not set}", "-p", "${REDIS_PORT?Variable not set}", "ping"]
       interval: "5s"
       timeout: "3s"
       retries: 5
@@ -74,7 +71,7 @@ services:
   # connects via the Docker internal network.
   redis-cluster-node-1:
     image: "redis:7.4-alpine"
-    container_name: "redis-cluster-node-1"
+    container_name: "ensights-redis-cluster-node-1"
     profiles: ["cluster"]
     command: >
       redis-server
@@ -90,7 +87,7 @@ services:
       --maxmemory-policy volatile-lru
       --maxclients ${REDIS_MAXIMUM_CLIENTS?Variable not set}
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD?Variable not set}", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD?Variable not set}", "-p", "${REDIS_PORT?Variable not set}", "ping"]
       interval: "5s"
       timeout: "3s"
       retries: 5
@@ -109,7 +106,7 @@ services:
 
   redis-cluster-node-2:
     image: "redis:7.4-alpine"
-    container_name: "redis-cluster-node-2"
+    container_name: "ensights-redis-cluster-node-2"
     profiles: ["cluster"]
     command: >
       redis-server
@@ -125,7 +122,7 @@ services:
       --maxmemory-policy volatile-lru
       --maxclients ${REDIS_MAXIMUM_CLIENTS?Variable not set}
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD?Variable not set}", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD?Variable not set}", "-p", "${REDIS_PORT?Variable not set}", "ping"]
       interval: "5s"
       timeout: "3s"
       retries: 5
@@ -144,7 +141,7 @@ services:
 
   redis-cluster-node-3:
     image: "redis:7.4-alpine"
-    container_name: "redis-cluster-node-3"
+    container_name: "ensights-redis-cluster-node-3"
     profiles: ["cluster"]
     command: >
       redis-server
@@ -160,7 +157,7 @@ services:
       --maxmemory-policy volatile-lru
       --maxclients ${REDIS_MAXIMUM_CLIENTS?Variable not set}
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD?Variable not set}", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD?Variable not set}", "-p", "${REDIS_PORT?Variable not set}", "ping"]
       interval: "5s"
       timeout: "3s"
       retries: 5
@@ -179,7 +176,7 @@ services:
 
   redis-cluster-node-4:
     image: "redis:7.4-alpine"
-    container_name: "redis-cluster-node-4"
+    container_name: "ensights-redis-cluster-node-4"
     profiles: ["cluster"]
     command: >
       redis-server
@@ -195,7 +192,7 @@ services:
       --maxmemory-policy volatile-lru
       --maxclients ${REDIS_MAXIMUM_CLIENTS?Variable not set}
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD?Variable not set}", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD?Variable not set}", "-p", "${REDIS_PORT?Variable not set}", "ping"]
       interval: "5s"
       timeout: "3s"
       retries: 5
@@ -214,7 +211,7 @@ services:
 
   redis-cluster-node-5:
     image: "redis:7.4-alpine"
-    container_name: "redis-cluster-node-5"
+    container_name: "ensights-redis-cluster-node-5"
     profiles: ["cluster"]
     command: >
       redis-server
@@ -230,7 +227,7 @@ services:
       --maxmemory-policy volatile-lru
       --maxclients ${REDIS_MAXIMUM_CLIENTS?Variable not set}
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD?Variable not set}", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD?Variable not set}", "-p", "${REDIS_PORT?Variable not set}", "ping"]
       interval: "5s"
       timeout: "3s"
       retries: 5
@@ -249,7 +246,7 @@ services:
 
   redis-cluster-node-6:
     image: "redis:7.4-alpine"
-    container_name: "redis-cluster-node-6"
+    container_name: "ensights-redis-cluster-node-6"
     profiles: ["cluster"]
     command: >
       redis-server
@@ -265,7 +262,7 @@ services:
       --maxmemory-policy volatile-lru
       --maxclients ${REDIS_MAXIMUM_CLIENTS?Variable not set}
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD?Variable not set}", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD?Variable not set}", "-p", "${REDIS_PORT?Variable not set}", "ping"]
       interval: "5s"
       timeout: "3s"
       retries: 5
@@ -286,7 +283,7 @@ services:
   # Exits after the cluster is created. Re-running it is safe (idempotent).
   redis-cluster-init:
     image: "redis:7.4-alpine"
-    container_name: "redis-cluster-init"
+    container_name: "ensights-redis-cluster-init"
     profiles: ["cluster"]
     depends_on:
       redis-cluster-node-1:

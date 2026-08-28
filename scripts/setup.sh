@@ -65,6 +65,11 @@ fi
 SECRET_KEY="${SECRET_KEY:-$(python3 -c "import secrets; print(secrets.token_urlsafe(32))")}"
 CRYPTO_KEY="${CRYPTO_KEY:-$(python3 -c "import secrets, base64; print(base64.urlsafe_b64encode(secrets.token_bytes(32)).decode())")}"
 POSTGRESQL_PASSWORD="${POSTGRESQL_PASSWORD:-$(python3 -c "import secrets; print(secrets.token_urlsafe(24))")}"
+# GlitchTip's containers dial Postgres directly by hostname before the app's
+# own POSTGRESQL_SERVER setting is ever read, and unlike pgAdmin4's use of the
+# same key, GlitchTip's compose has no soft default, it requires the variable
+# set. "postgresql" is the container's own hostname on the shared network.
+POSTGRESQL_HOST="${POSTGRESQL_HOST:-postgresql}"
 FIRST_SUPERUSER_PASSWORD="${FIRST_SUPERUSER_PASSWORD:-$(python3 -c "import secrets; print(secrets.token_urlsafe(16))")}"
 RABBITMQ_PASSWORD="${RABBITMQ_PASSWORD:-$(python3 -c "import secrets; print(secrets.token_urlsafe(16))")}"
 RABBITMQ_ERLANG_COOKIE="${RABBITMQ_ERLANG_COOKIE:-$(python3 -c "import secrets; print(secrets.token_urlsafe(32))")}"
@@ -76,31 +81,47 @@ REDIS_COMMANDER_PASSWORD="${REDIS_COMMANDER_PASSWORD:-$(python3 -c "import secre
 METABASE_READ_ONLY_PASSWORD="${METABASE_READ_ONLY_PASSWORD:-$(python3 -c "import secrets; print(secrets.token_urlsafe(16))")}"
 STORAGE_SECRET_KEY="${STORAGE_SECRET_KEY:-$(python3 -c "import secrets; print(secrets.token_urlsafe(32))")}"
 MINIO_ROOT_PASSWORD="${MINIO_ROOT_PASSWORD:-$(python3 -c "import secrets; print(secrets.token_urlsafe(16))")}"
+# .env.example always carries the project's real POSTGRESQL_USER (== project_slug,
+# baked in by Copier at render time), even before .env exists on a fresh clone.
+CURRENT_POSTGRESQL_USER="$(sed -n 's/^POSTGRESQL_USER=//p' .env.example 2>/dev/null | head -1 | tr -d '"')"
+MINIO_DEFAULT_BUCKET="${MINIO_DEFAULT_BUCKET:-${CURRENT_POSTGRESQL_USER:-app}-files}"
 GOOGLE_CLIENT_SECRET="${GOOGLE_CLIENT_SECRET:-$(python3 -c "import secrets; print(secrets.token_urlsafe(24))")}"
 SMTP_PASSWORD="${SMTP_PASSWORD:-$(python3 -c "import secrets; print(secrets.token_urlsafe(16))")}"
+# Mailpit's web UI captures every outgoing email, including password-reset and
+# magic-link tokens, so it must never be left open even in local development.
+MAILPIT_UI_AUTH="${MAILPIT_UI_AUTH:-admin:$(python3 -c "import secrets; print(secrets.token_urlsafe(12))")}"
 
 if [ ! -f .env ]; then
     info "Generating environment variables..."
     cp .env.example .env
-
-    # Reset .env.example back to placeholders so real secrets never leak into it.
-    "${SED_INPLACE[@]}" "s/SECRET_KEY=.*/SECRET_KEY=your-secret-key/" .env.example
-    "${SED_INPLACE[@]}" "s/CRYPTO_KEY=.*/CRYPTO_KEY=your-32-bit-fernet-key==/" .env.example
-    "${SED_INPLACE[@]}" "s/POSTGRESQL_PASSWORD=.*/POSTGRESQL_PASSWORD=your-postgresql-password/" .env.example
-    "${SED_INPLACE[@]}" "s/FIRST_SUPERUSER_PASSWORD=.*/FIRST_SUPERUSER_PASSWORD=your-superuser-password/" .env.example
-    "${SED_INPLACE[@]}" "s/RABBITMQ_PASSWORD=.*/RABBITMQ_PASSWORD=your-rabbitmq-password/" .env.example
-    "${SED_INPLACE[@]}" "s/RABBITMQ_ERLANG_COOKIE=.*/RABBITMQ_ERLANG_COOKIE=your-rabbitmq-erlang-cookie/" .env.example
-    "${SED_INPLACE[@]}" "s/REDIS_PASSWORD=.*/REDIS_PASSWORD=your-redis-password/" .env.example
-    "${SED_INPLACE[@]}" "s/FLOWER_PASSWORD=.*/FLOWER_PASSWORD=your-flower-password/" .env.example
-    "${SED_INPLACE[@]}" "s/PGADMIN4_PASSWORD=.*/PGADMIN4_PASSWORD=your-pgadmin-password/" .env.example
-    "${SED_INPLACE[@]}" "s/GLITCHTIP_SECRET_KEY=.*/GLITCHTIP_SECRET_KEY=your-glitchtip-secret-key/" .env.example
-    "${SED_INPLACE[@]}" "s/REDIS_COMMANDER_PASSWORD=.*/REDIS_COMMANDER_PASSWORD=your-redis-commander-password/" .env.example
-    "${SED_INPLACE[@]}" "s/METABASE_READ_ONLY_PASSWORD=.*/METABASE_READ_ONLY_PASSWORD=your-metabase-read-only-password/" .env.example
-    "${SED_INPLACE[@]}" "s/MINIO_ROOT_PASSWORD=.*/MINIO_ROOT_PASSWORD=minioadmin/" .env.example
-    "${SED_INPLACE[@]}" "s/SENTRY_DSN=.*/SENTRY_DSN=https:\/\/public:secret@sentry.com\/1/" .env.example
 else
     info "Backfilling any placeholder secrets in existing .env..."
 fi
+
+# Reset .env.example back to placeholders so real secrets never leak into it.
+# Unconditional on purpose: `copier update` (see synchronize.sh) re-renders
+# .env.example from the real answers on every sync, and .env already exists on
+# that path, so scrubbing only when .env is missing would leave every secret
+# sitting in a file that is not gitignored.
+"${SED_INPLACE[@]}" "s/SECRET_KEY=.*/SECRET_KEY=your-secret-key/" .env.example
+"${SED_INPLACE[@]}" "s/CRYPTO_KEY=.*/CRYPTO_KEY=your-32-bit-fernet-key==/" .env.example
+"${SED_INPLACE[@]}" "s/POSTGRESQL_PASSWORD=.*/POSTGRESQL_PASSWORD=your-postgresql-password/" .env.example
+"${SED_INPLACE[@]}" "s/FIRST_SUPERUSER_PASSWORD=.*/FIRST_SUPERUSER_PASSWORD=your-superuser-password/" .env.example
+"${SED_INPLACE[@]}" "s/RABBITMQ_PASSWORD=.*/RABBITMQ_PASSWORD=your-rabbitmq-password/" .env.example
+"${SED_INPLACE[@]}" "s/RABBITMQ_ERLANG_COOKIE=.*/RABBITMQ_ERLANG_COOKIE=your-rabbitmq-erlang-cookie/" .env.example
+"${SED_INPLACE[@]}" "s/REDIS_PASSWORD=.*/REDIS_PASSWORD=your-redis-password/" .env.example
+"${SED_INPLACE[@]}" "s/FLOWER_PASSWORD=.*/FLOWER_PASSWORD=your-flower-password/" .env.example
+"${SED_INPLACE[@]}" "s/PGADMIN4_PASSWORD=.*/PGADMIN4_PASSWORD=your-pgadmin-password/" .env.example
+"${SED_INPLACE[@]}" "s/GLITCHTIP_SECRET_KEY=.*/GLITCHTIP_SECRET_KEY=your-glitchtip-secret-key/" .env.example
+"${SED_INPLACE[@]}" "s/REDIS_COMMANDER_PASSWORD=.*/REDIS_COMMANDER_PASSWORD=your-redis-commander-password/" .env.example
+"${SED_INPLACE[@]}" "s/METABASE_READ_ONLY_PASSWORD=.*/METABASE_READ_ONLY_PASSWORD=your-metabase-read-only-password/" .env.example
+# Metabase reuses the project's Postgres password, and GlitchTip embeds both
+# the Postgres and Redis passwords in full connection URLs.
+"${SED_INPLACE[@]}" "s/METABASE_DATABASE_PASSWORD=.*/METABASE_DATABASE_PASSWORD=your-postgresql-password/" .env.example
+"${SED_INPLACE[@]}" "s|^DATABASE_URL=.*|DATABASE_URL=postgres://your-user:your-postgresql-password@postgresql:5432/glitchtip|" .env.example
+"${SED_INPLACE[@]}" "s|^REDIS_URL=.*|REDIS_URL=redis://:your-redis-password@redis:6379/0|" .env.example
+"${SED_INPLACE[@]}" "s/MINIO_ROOT_PASSWORD=.*/MINIO_ROOT_PASSWORD=minioadmin/" .env.example
+"${SED_INPLACE[@]}" "s/SENTRY_DSN=.*/SENTRY_DSN=https:\/\/public:secret@sentry.com\/1/" .env.example
 
 # Replace KEY's value only when it is empty, a placeholder ("your-..."), or
 # matches the optional extra placeholder (e.g. a well-known service default).
@@ -130,6 +151,7 @@ backfill_secret() {
 backfill_secret SECRET_KEY "${SECRET_KEY}"
 backfill_secret CRYPTO_KEY "${CRYPTO_KEY}"
 backfill_secret POSTGRESQL_PASSWORD "${POSTGRESQL_PASSWORD}"
+backfill_secret POSTGRESQL_HOST "${POSTGRESQL_HOST}"
 backfill_secret FIRST_SUPERUSER_PASSWORD "${FIRST_SUPERUSER_PASSWORD}"
 backfill_secret RABBITMQ_PASSWORD "${RABBITMQ_PASSWORD}"
 backfill_secret RABBITMQ_ERLANG_COOKIE "${RABBITMQ_ERLANG_COOKIE}"
@@ -141,8 +163,10 @@ backfill_secret REDIS_COMMANDER_PASSWORD "${REDIS_COMMANDER_PASSWORD}"
 backfill_secret METABASE_READ_ONLY_PASSWORD "${METABASE_READ_ONLY_PASSWORD}"
 backfill_secret STORAGE_SECRET_KEY "${STORAGE_SECRET_KEY}"
 backfill_secret MINIO_ROOT_PASSWORD "${MINIO_ROOT_PASSWORD}" "minioadmin"
+backfill_secret MINIO_DEFAULT_BUCKET "${MINIO_DEFAULT_BUCKET}"
 backfill_secret GOOGLE_CLIENT_SECRET "${GOOGLE_CLIENT_SECRET}"
 backfill_secret SMTP_PASSWORD "${SMTP_PASSWORD}"
+backfill_secret MAILPIT_UI_AUTH "${MAILPIT_UI_AUTH}"
 
 # Derive the connection URLs and Metabase password from the current, possibly
 # just-backfilled, database and Redis passwords. Idempotent.
@@ -243,7 +267,8 @@ elif command -v docker >/dev/null 2>&1; then
     fi
 
     info "Starting core services..."
-    docker network create internal 2>/dev/null || true
+    # No `docker network create` here any more: the compose network is named
+    # after the project and owned by it, so Compose brings it up itself.
     if docker compose ps -q 2>/dev/null | grep -q .; then
         warn "Stopping any existing containers, volumes preserved..."
     fi
@@ -271,9 +296,16 @@ elif command -v docker >/dev/null 2>&1; then
 
     info "Waiting for database readiness..."
     sleep 5
+    # Probed on the configured port, not pg_isready's own default of 5432.
+    # Postgres is started with `-p ${POSTGRESQL_PORT}`, so on any other port a
+    # bare pg_isready reports "no response" forever and this loop times out
+    # against a database that has been up the whole time.
+    POSTGRESQL_PORT_VALUE="$(sed -n "s/^POSTGRESQL_PORT=//p" .env | head -1)"
+    POSTGRESQL_PORT_VALUE="${POSTGRESQL_PORT_VALUE:-5432}"
     database_ready=false
     for i in $(seq 1 30); do
-        if docker compose exec -T postgresql pg_isready 2>/dev/null; then
+        if docker compose exec -T postgresql \
+            pg_isready -p "$POSTGRESQL_PORT_VALUE" 2>/dev/null; then
             database_ready=true
             break
         fi

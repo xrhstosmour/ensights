@@ -85,13 +85,18 @@ class FileService:
         content_hash = hash_sha256.hexdigest()
 
         # Fast-path dedup check to skip the storage upload for the common
-        # case. This alone is racy (two concurrent uploads of identical
-        # content can both miss each other's in-flight row), so the actual
-        # insert below is made race-safe via a DB-level unique constraint
-        # on content_hash plus an atomic upsert.
-        existing = await self.file_repository.get_by_content_hash(content_hash)
+        # case. Scoped to this uploader, not just the tenant: a colleague's
+        # row carries their filename, their visibility and their file ID,
+        # and `get_owned` would refuse to hand it back to this caller
+        # afterwards, stranding a reference nobody can ever release.
+        #
+        # This alone is racy (two concurrent uploads of identical content
+        # can both miss each other's in-flight row), so the actual insert
+        # below is made race-safe via a DB-level unique constraint on
+        # `(tenant_id, uploaded_by, content_hash)` plus an atomic upsert.
+        existing = await self.file_repository.get_by_content_hash(content_hash, user.id)
         if existing:
-            await self.file_repository.increment_reference_count(content_hash)
+            await self.file_repository.increment_reference_count(content_hash, user.id)
             logger.info(
                 "file_upload_dedup",
                 content_hash=content_hash[:16],
@@ -101,7 +106,9 @@ class FileService:
 
         # Upload to blob storage. Thumbnails are generated afterward by a
         # Celery task, not inline, so this doesn't hold the request open.
-        object_key, _ = await upload_file(content=content, mimetype=mimetype)
+        object_key, _ = await upload_file(
+            content=content, mimetype=mimetype, uploaded_by=user.id
+        )
 
         record, created = await self.file_repository.create_or_increment(
             {
@@ -124,8 +131,12 @@ class FileService:
 
         if not created:
             # Lost the race: another upload of identical content committed
-            # first. Discard the blob we just wrote so it does not leak.
-            await delete_object(object_key=object_key, bucket=settings.STORAGE_BUCKET)
+            # first. Nothing to clean up, and nothing may be cleaned up.
+            # Object keys are content-addressed and tenant-namespaced (see
+            # `build_object_key`), so the winner's row points at the exact
+            # key this upload just wrote, with the exact same bytes.
+            # Deleting it here purged the blob out from under the winner and
+            # every later referencer, leaving rows whose downloads 404.
             logger.info(
                 "file_upload_dedup_race",
                 content_hash=content_hash[:16],
@@ -189,6 +200,12 @@ class FileService:
         record = await self.get_owned_file(file_id, user)
         new_count = await self.file_repository.decrement_reference_count(file_id)
 
+        # One row serves every reference to the same content within a tenant
+        # (see `create_or_increment`), so dropping a single reference must
+        # not retire the row while others still hold it. Soft-deleting here
+        # unconditionally made the row invisible to `get_owned`, so every
+        # remaining referencer got "File not found." on a file they still
+        # owned, with `reference_count` left stranded above zero.
         if new_count == 0:
             # Delete thumbnail FIRST to avoid orphaned thumbnails if main
             # delete succeeds but thumbnail delete fails.
@@ -198,8 +215,7 @@ class FileService:
                     bucket=record.bucket,
                 )
             await delete_object(object_key=record.object_key, bucket=record.bucket)
-
-        await self.file_repository.delete(file_id)
+            await self.file_repository.delete(file_id)
 
         logger.info(
             "file_deleted",

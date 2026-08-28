@@ -34,11 +34,11 @@ from app.database import get_async_session
 from app.models.api_key import APIKey
 from app.models.user import User
 from app.models.user import UserRole
-from app.repositories.api_key_repository import APIKeyRepository
 from app.repositories.user_repository import UserRepository
+from app.services.api_key_service import APIKeyService
 
 if TYPE_CHECKING:
-    pass
+    from app.models.tenant import Tenant
 
 logger = get_logger("deps")
 
@@ -54,6 +54,30 @@ SessionDependency = Annotated[
     AsyncSession, Depends(get_async_session, scope="function")
 ]
 AccessTokenDependency = Annotated[str, Depends(oauth2_scheme)]
+
+
+def is_tenant_usable(tenant: Tenant | None) -> bool:
+    """Report whether a tenant may still serve requests.
+
+    Deactivating or soft-deleting a tenant is how an organization is
+    offboarded, but that revokes nothing already issued to its members.
+    Without this check every access token stayed good until it expired
+    and every API key stayed good forever, so a suspended or deleted
+    organization kept full read/write access to its own data.
+
+    A tenant of ``None`` is not a deactivated one: users with no tenant
+    (OAuth signups, see ``auth_service.py``) fall back to
+    ``SYSTEM_TENANT_ID``, which has no row to inspect.
+
+    Args:
+        tenant: The tenant to check, or None when the user has none
+
+    Returns:
+        True if the tenant is active and not soft-deleted
+    """
+    if tenant is None:
+        return True
+    return tenant.is_active and tenant.deleted_at is None
 
 
 async def get_current_user(
@@ -124,6 +148,12 @@ async def get_current_user(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="User account is inactive",
+        )
+
+    if not is_tenant_usable(user.tenant):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Tenant account is inactive",
         )
 
     # Reject access tokens issued before the last password change or reset.
@@ -232,6 +262,12 @@ async def get_current_user_ws(
             reason="User account is inactive",
         )
 
+    if not is_tenant_usable(user.tenant):
+        raise WebSocketException(
+            code=status.WS_1008_POLICY_VIOLATION,
+            reason="Tenant account is inactive",
+        )
+
     # See get_current_user() for why this falls back rather than skipping.
     set_current_tenant_id(user.tenant_id or SYSTEM_TENANT_ID)
 
@@ -291,11 +327,15 @@ async def get_api_key_auth(
 
     key_id, key_secret = api_key_header.split(":", 1)
 
-    # Verify key.
-    apikey_repository = APIKeyRepository(session)
-    api_key = await apikey_repository.verify_key(key_id, key_secret)
+    # Verified through the service, not the repository. The repository's
+    # own verify_key ran bcrypt synchronously, freezing the event loop for
+    # every other request for the duration of the hash, returned early when
+    # no row matched so response time told an attacker which key IDs exist,
+    # and never stamped `last_used_at`, leaving usage tracking always NULL.
+    service = APIKeyService(session)
+    api_key = await service.verify(key_id, key_secret)
 
-    if not api_key:
+    if not api_key or not is_tenant_usable(api_key.tenant):
         return None
 
     # Set tenant context.
@@ -360,7 +400,7 @@ async def get_optional_current_user(
     with system_context():
         user = await user_repository.get(UUID(user_id))
 
-    if not user or not user.is_active:
+    if not user or not user.is_active or not is_tenant_usable(user.tenant):
         return None
 
     # Reject access tokens issued before the last password change or reset.

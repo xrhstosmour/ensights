@@ -7,7 +7,3 @@ include:
   - containers/databases/redis/docker-compose.yml
   - containers/distribute/brokers/rabbitmq/docker-compose.yml
   - containers/databases/manage/metabase/docker-compose.yml
-
-networks:
-  backend:
-    driver: bridge
