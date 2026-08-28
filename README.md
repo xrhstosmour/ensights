@@ -141,16 +141,23 @@ broken is named with the command to investigate it.
 
 ### 6. Set up the Metabase dashboards
 
-Metabase starts empty, and its cards are added by hand once. Open
-[http://localhost:3000](http://localhost:3000), create the admin account, and
-when it asks for a database to analyse use the read-only credentials `setup.sh`
-generated: host `postgresql`, port `5432`, database and password from
-`POSTGRESQL_DATABASE` and `METABASE_READ_ONLY_PASSWORD` in `.env`, username
-`metabase_readonly`.
+```bash
+uv run --env-file .env python scripts/metabase_cards.py
+```
 
-Then follow [`metabase/README.md`](metabase/README.md), which lists the twelve
-queries, the three dashboards they belong to, and the number-separator setting
-that makes the figures read the way the manuscript writes them.
+Metabase starts empty. This creates the admin account, using the same
+`FIRST_SUPERUSER_EMAIL` and `FIRST_SUPERUSER_PASSWORD` you logged into the API
+with, connects the database as the read-only `metabase_readonly` user that
+`setup.sh` provisioned, builds the twelve cards from `metabase/queries/`,
+arranges them on three dashboards, and sets the number separators so a figure
+reads `379.437,96` the way the manuscript writes it.
+
+Then open [http://localhost:3000](http://localhost:3000) and sign in. Running
+the script again after editing a query updates that card in place.
+
+[`metabase/README.md`](metabase/README.md) explains what each card shows, which
+dashboard it belongs to, the three places a card deliberately differs from its
+endpoint, and how to do the same by hand if you would rather.
 
 ### 7. Load the real dataset, to reproduce the thesis
 
