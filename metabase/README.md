@@ -19,12 +19,12 @@ docker compose up metabase  # http://localhost:3000
 
 `./scripts/demo.sh` does both, and waits for Metabase to answer before printing
 its URL. Metabase migrates its own application database on first boot, which
-takes a couple of minutes, and its container declares no health check, so a
-container that is up is not yet a Metabase that is serving. The missing health
-check is fixed upstream in
-[containers#78](https://github.com/xrhstosmour/containers/pull/78), merged, so
-the poll in `demo.sh` is the belt to that braces until the change is vendored
-in here.
+takes a couple of minutes, so a container that is up is not yet a Metabase that
+is serving. The container now declares a health check, added in
+[containers#78](https://github.com/xrhstosmour/containers/pull/78) and vendored
+in here, so `docker compose ps` distinguishes the two states rather than
+reporting a crash loop as a slow start. The poll in `demo.sh` predates it and
+still runs, which costs nothing.
 
 Set **Admin, Localization, Number separators** to `,.`, a comma for the
 decimal mark and a dot for thousands, so a figure reads `379.437,96`. This is
@@ -38,7 +38,7 @@ credentials `setup.sh` generated:
 | Field | Value |
 | --- | --- |
 | Database type | PostgreSQL |
-| Host | `postgresql` (the container name) |
+| Host | `postgresql` (the Compose service name, `ensights-postgresql` also resolves) |
 | Port | `5432` |
 | Database name | value of `POSTGRESQL_DATABASE` in `.env` |
 | Username | `metabase_readonly` |
