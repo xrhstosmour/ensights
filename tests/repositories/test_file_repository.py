@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from uuid import UUID
+from uuid import uuid4
 
 import pytest
 from sqlalchemy import delete
@@ -177,7 +178,7 @@ class TestFileRepository:
                 self._file_data(uploaded_by=user.id, content_hash="unique-hash-001")
             )
 
-            found = await repo.get_by_content_hash("unique-hash-001")
+            found = await repo.get_by_content_hash("unique-hash-001", user.id)
 
         assert found is not None
         assert found.content_hash == "unique-hash-001"
@@ -195,7 +196,7 @@ class TestFileRepository:
             None.
         """
         repo = FileRepository(session)
-        found = await repo.get_by_content_hash("nonexistent-hash")
+        found = await repo.get_by_content_hash("nonexistent-hash", uuid4())
 
         assert found is None
 
@@ -250,6 +251,110 @@ class TestFileRepository:
         with tenant_context(tenant_b.id):
             owned_by_b = await repo.get_owned(record_b.id, user_b.id)
         assert owned_by_b is not None
+
+    @pytest.mark.anyio
+    async def test_create_or_increment_resurrects_a_deleted_row(
+        self, session: AsyncSession
+    ) -> None:
+        """Re-uploading content that was deleted must revive its row.
+
+        The unique constraint does not know about ``deleted_at``, so the
+        retired row still wins the conflict. Left soft-deleted it was
+        invisible to every lookup, so the upload reported success and then
+        found nothing, and the content could never be uploaded again.
+
+        Args:
+            session: Async database session fixture.
+
+        Returns:
+            None.
+        """
+        tenant = await self._create_tenant(session, slug="resurrect-org")
+        uploader = await self._create_user(session, email="first@example.com")
+        repo = FileRepository(session)
+
+        with tenant_context(tenant.id):
+            original, _ = await repo.create_or_increment(
+                self._file_data(
+                    uploaded_by=uploader.id,
+                    content_hash="deleted-then-reuploaded",
+                    filename="original.txt",
+                    thumbnail_object_key="thumbnails/purged",
+                )
+            )
+            await repo.delete(original.id)
+
+            revived, created = await repo.create_or_increment(
+                self._file_data(
+                    uploaded_by=uploader.id,
+                    content_hash="deleted-then-reuploaded",
+                    filename="reuploaded.txt",
+                    thumbnail_object_key=None,
+                )
+            )
+
+            assert revived.id == original.id
+            assert revived.deleted_at is None
+            # Starts over at one reference, the blob was purged on delete.
+            assert revived.reference_count == 1
+            # `created` drives the caller's thumbnail dispatch, and the old
+            # thumbnail went with the old blob.
+            assert created is True
+            assert revived.thumbnail_object_key is None
+            assert revived.filename == "reuploaded.txt"
+
+            assert await repo.get_owned(revived.id, uploader.id) is not None
+
+    @pytest.mark.anyio
+    async def test_create_or_increment_scopes_dedup_per_uploader(
+        self, session: AsyncSession
+    ) -> None:
+        """Two colleagues uploading identical content must not share a row.
+
+        A row carries a single ``uploaded_by``, so handing the second
+        uploader the first one's row gave them the first one's filename,
+        visibility and file ID, and a reference they could never release,
+        since ``get_owned()`` filters on ``uploaded_by`` and locked them
+        straight back out of it.
+
+        Args:
+            session: Async database session fixture.
+
+        Returns:
+            None.
+        """
+        tenant = await self._create_tenant(session, slug="one-org")
+        first = await self._create_user(session, email="colleague-a@example.com")
+        second = await self._create_user(session, email="colleague-b@example.com")
+        repo = FileRepository(session)
+
+        with tenant_context(tenant.id):
+            record_first, created_first = await repo.create_or_increment(
+                self._file_data(
+                    uploaded_by=first.id,
+                    content_hash="shared-between-colleagues",
+                    filename="first.txt",
+                    is_public=True,
+                )
+            )
+            record_second, created_second = await repo.create_or_increment(
+                self._file_data(
+                    uploaded_by=second.id,
+                    content_hash="shared-between-colleagues",
+                    filename="second.txt",
+                    is_public=False,
+                )
+            )
+
+            assert created_first is True
+            assert created_second is True
+            assert record_first.id != record_second.id
+            assert record_second.uploaded_by == second.id
+            # Neither their colleague's name for it nor their visibility.
+            assert record_second.filename == "second.txt"
+            assert record_second.is_public is False
+
+            assert await repo.get_owned(record_second.id, second.id) is not None
 
     @pytest.mark.anyio
     async def test_create_or_increment_resolves_concurrent_upload_race(
@@ -326,7 +431,7 @@ class TestFileRepository:
             )
             assert file_record.reference_count == 1
 
-            await repo.increment_reference_count("hash-to-inc")
+            await repo.increment_reference_count("hash-to-inc", user.id)
 
             # Refresh to get updated count.
             updated = await repo.get(file_record.id)
@@ -353,7 +458,7 @@ class TestFileRepository:
                 self._file_data(uploaded_by=user.id, content_hash="hash-to-dec")
             )
             # Increment first so we have room to decrement.
-            await repo.increment_reference_count("hash-to-dec")
+            await repo.increment_reference_count("hash-to-dec", user.id)
 
             new_count = await repo.decrement_reference_count(file_record.id)
 
