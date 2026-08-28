@@ -49,17 +49,28 @@ the analytical schema, however a query is edited later.
 
 ## Adding the cards
 
-Metabase has no import format for raw SQL, so each card is created once by
-hand:
+```bash
+uv run --env-file .env python scripts/metabase_cards.py
+```
 
-1. **New** → **SQL query**, pick the database above.
-2. Paste the contents of a file from `queries/`.
-3. Save it under the name in the table below.
-4. Add it to a dashboard.
+That completes first-run setup if it has not happened, connects the data
+source above, creates every card in `queries/` under the name in the table
+below, lays out the three dashboards, and sets the number separators. It reads
+the same `.sql` files this directory documents, so there is no second copy of a
+query to drift.
 
-The `[[AND ... {{start}}]]` blocks are Metabase's optional-clause syntax. When
-you save a card containing them, Metabase offers to create `start` and `end`
-date filters; accept, and the clause is only applied when a value is supplied.
+Re-running updates the existing cards in place rather than making a second
+copy, which is what makes it safe after editing a query: change the `.sql`
+file, run it again, and the card matches the file.
+
+Doing it by hand still works and the interface is the same: **New** → **SQL
+query**, pick the database above, paste a file from `queries/`, save it under
+the name in the table below, add it to a dashboard, twelve times.
+
+The `[[AND ... {{start}}]]` blocks are Metabase's optional-clause syntax. The
+script declares the `start` and `end` date filters itself. Saving such a card
+by hand, Metabase offers to create them; accept, and the clause is only
+applied when a value is supplied.
 
 ## The cards
 
