@@ -75,7 +75,12 @@ globally, `postgresql`, `redis`, `rabbitmq`, `metabase`, and they publish
 5432, 6379, 5672 and 3000 on the host. Another project generated from the same
 template cannot run at the same time, and the symptom is not obvious, the
 second stack silently attaches to the first one's database. Stop the other one
-with `docker compose down` in its directory first.
+with `docker compose down` in its directory first. This one is a template bug
+rather than a choice, and it is already fixed upstream in
+[yap#176](https://github.com/xrhstosmour/yap/pull/176), which names the
+containers, volumes and network after the project. The fix reaches this repo
+through `./scripts/synchronize.sh` followed by `python3 scripts/assemble.py`,
+and once it has, the warning above stops applying.
 
 ### 2. Install and provision
 
