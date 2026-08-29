@@ -108,10 +108,10 @@ the same headers instead of raw column names.
 Three dashboards cover the ground without duplicating cards. Splitting them
 this way also keeps each board small enough to take in at a glance:
 
-- **Sales**, 01, 03, 04, 05, 07. What sold, where and when.
-- **Customers**, 02, 09, 10, 12. Who bought, whether they came back, and how
+- **Ensights: Sales**, 01, 03, 04, 05, 07. What sold, where and when.
+- **Ensights: Customers**, 02, 09, 10, 12. Who bought, whether they came back, and how
   concentrated the revenue is.
-- **Merchandising**, 06, 11, 08. What came back, what sells together, and the
+- **Ensights: Merchandising**, 06, 11, 08. What came back, what sells together, and the
   headline value.
 
 ## Reading the cards honestly
