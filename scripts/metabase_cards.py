@@ -53,15 +53,22 @@ CARD_NAMES = {
     "12": "Revenue Concentration",
 }
 
+# Prefixed because the defence deck screenshots them under these exact names,
+# and a screenshot that disagrees with the running system invites the question
+# it was meant to answer.
 DASHBOARDS = [
-    ("Sales", "What sold, where and when.", ["01", "03", "04", "05", "07"]),
     (
-        "Customers",
+        "Ensights: Sales",
+        "What sold, where and when.",
+        ["01", "03", "04", "05", "07"],
+    ),
+    (
+        "Ensights: Customers",
         "Who bought, whether they came back, and how concentrated the revenue is.",
         ["02", "09", "10", "12"],
     ),
     (
-        "Merchandising",
+        "Ensights: Merchandising",
         "What came back, what sells together, and the headline value.",
         ["06", "11", "08"],
     ),
