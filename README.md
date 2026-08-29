@@ -186,9 +186,37 @@ asyncio.run(main())
 "
 ```
 
-Re-run `scripts/seed_demo.py` afterwards to re-mine the baskets over the new
-data. Skip the synthetic seed entirely by importing before the first
-`demo.sh`, since it only seeds when the database has no orders.
+Then re-mine the baskets over the new data, at the support threshold the
+manuscript reports:
+
+```bash
+uv run --env-file .env python -c "
+import asyncio
+from app.core import SYSTEM_TENANT_ID
+from app.core.tenant import set_current_tenant_id
+from app.database import async_session_factory
+from app.services.market_basket_service import MarketBasketService
+
+async def main():
+    set_current_tenant_id(SYSTEM_TENANT_ID)
+    async with async_session_factory() as session:
+        _, result = await MarketBasketService(session).run(
+            algorithm='fpgrowth', minimum_support=0.02, minimum_confidence=0.3)
+    print(result.basket_count, len(result.itemsets), len(result.rules))
+
+asyncio.run(main())
+"
+```
+
+That prints `36269 385 134`, the figures in chapter 5. Do not use
+`scripts/seed_demo.py` for this step: it mines at 1% support, chosen so the
+small synthetic catalogue still produces rules, and on the real dataset that
+yields 1.185 rules whose strongest lift is 47,8 rather than the 134 rules and
+lift 25,2 the manuscript reports. Both are correct for their threshold, but
+only one matches the text.
+
+Skip the synthetic seed entirely by importing before the first `demo.sh`, since
+it only seeds when the database has no orders.
 
 ## Adding data
 
