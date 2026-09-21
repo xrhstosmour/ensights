@@ -12,6 +12,8 @@ from typing import Annotated
 from typing import Any
 from typing import Literal
 from typing import Self
+from urllib.parse import quote
+from urllib.parse import urlsplit
 
 from pydantic import AnyUrl
 from pydantic import BeforeValidator
@@ -172,8 +174,8 @@ class Settings(BaseSettings):
             query = "&".join(f"{k}={v}" for k, v in query_params.items())
         return PostgresDsn.build(
             scheme="postgresql+psycopg",
-            username=self.POSTGRESQL_USER,
-            password=self.POSTGRESQL_PASSWORD,
+            username=quote(self.POSTGRESQL_USER, safe=""),
+            password=quote(self.POSTGRESQL_PASSWORD, safe=""),
             host=self.POSTGRESQL_SERVER,
             port=self.POSTGRESQL_PORT,
             path=self.POSTGRESQL_ADDITIONAL_DATABASE,
@@ -199,10 +201,15 @@ class Settings(BaseSettings):
         if query_params:
             query = "&".join(f"{k}={v}" for k, v in query_params.items())
 
+        # Percent-encode the credentials. `PostgresDsn.build` escapes `@`
+        # and `:` but interpolates `/`, `#`, `?` and `%` raw, so a password
+        # holding any of the first three failed URL parsing outright and the
+        # application could not start, while a `%` produced a malformed
+        # escape that later consumers decoded to something else.
         return PostgresDsn.build(
             scheme="postgresql+psycopg",
-            username=self.POSTGRESQL_USER,
-            password=self.POSTGRESQL_PASSWORD,
+            username=quote(self.POSTGRESQL_USER, safe=""),
+            password=quote(self.POSTGRESQL_PASSWORD, safe=""),
             host=self.POSTGRESQL_SERVER,
             port=self.POSTGRESQL_PORT,
             path=self.POSTGRESQL_DATABASE,
@@ -338,7 +345,7 @@ class Settings(BaseSettings):
     STORAGE_ACCESS_KEY: str = ""
     STORAGE_SECRET_KEY: str = ""
     STORAGE_BUCKET: str = "ensights-files"
-    STORAGE_REGION: str = "us-east-1"
+    STORAGE_REGION: str = "eu-central-1"
     STORAGE_MAX_FILE_SIZE: int = 10485760
     STORAGE_PUBLIC_URL: str = ""
 
@@ -351,6 +358,8 @@ class Settings(BaseSettings):
     __placeholder_patterns = frozenset(
         {"your-", "change_me", "change_this", "example", "placeholder"}
     )
+
+    __loopback_hosts = frozenset({"localhost", "127.0.0.1", "[::1]", "0.0.0.0"})
 
     def _check_secret(self, var_name: str, value: str | None) -> None:
         """Check that a required secret is properly configured.
@@ -378,6 +387,18 @@ class Settings(BaseSettings):
             else:
                 raise ValueError(message)
 
+    def _is_loopback_origin(self, origin: str) -> bool:
+        """Whether an origin points at the developer's own machine.
+
+        Args:
+            origin: An origin string, with or without a scheme and port.
+
+        Returns:
+            True if the host component is a loopback address.
+        """
+        host = urlsplit(origin if "//" in origin else f"//{origin}").hostname
+        return host in self.__loopback_hosts
+
     @model_validator(mode="after")
     def _enforce_non_default_secrets(self) -> Self:
         """Validate all required secrets are configured for non-local environments."""
@@ -395,6 +416,49 @@ class Settings(BaseSettings):
             self._check_secret("STORAGE_SECRET_KEY", self.STORAGE_SECRET_KEY)
 
         return self
+
+    @model_validator(mode="after")
+    def _reject_loopback_cors_origins(self) -> Self:
+        """Refuse to serve a deployed environment with a loopback CORS origin.
+
+        `FRONTEND_HOST` defaults to `http://localhost:5173` and is appended
+        to `all_cors_origins` unconditionally, and the CORS middleware runs
+        with `allow_credentials=True`. Left at the default in a deployed
+        environment, the API therefore honours credentialed cross-origin
+        requests from anything the victim happens to be running on that
+        port, and returns authenticated responses to it.
+
+        The same default also builds the links in verification, reset and
+        magic-link emails, so a deployment that forgot to set it was
+        mailing users URLs pointing at their own machine. One missing
+        variable, two failures, and neither announced itself.
+
+        Silent in `local`, where loopback is the whole point. Unlike a
+        missing secret, this is not a lesser problem there, it is correct.
+
+        Returns:
+            The validated settings instance.
+
+        Raises:
+            ValueError: If a deployed environment has a loopback origin.
+        """
+        if self.ENVIRONMENT == "local":
+            return self
+
+        offenders = [
+            origin
+            for origin in self.all_cors_origins
+            if self._is_loopback_origin(origin)
+        ]
+        if not offenders:
+            return self
+
+        raise ValueError(
+            f"CORS origins point at the local machine ({', '.join(offenders)}) "
+            f"while ENVIRONMENT is '{self.ENVIRONMENT}'. Set FRONTEND_HOST, and "
+            "BACKEND_CORS_ORIGINS if used, to the deployed frontend's origin. "
+            "The API sends credentialed CORS responses to these origins."
+        )
 
 
 # Global settings instance - load once at module import.

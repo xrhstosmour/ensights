@@ -73,9 +73,9 @@ disclaimer with it.
 One thing to know before starting: the containers, volumes and network are
 named after the project, `ensights-postgresql`, `ensights-redis` and so on, so
 another project generated from the same template no longer shares this one's
-database. That was a real hazard until
-[yap#176](https://github.com/xrhstosmour/yap/pull/176), because the names were
-global and a second stack silently attached to the first one's data.
+database. That was a real hazard before the naming was scoped per project,
+because the names were global and a second stack silently attached to the
+first one's data.
 
 Host ports are still shared, though. This stack publishes 5432, 6379, 5672 and
 3000, so a second project on its defaults collides there and the second one to
@@ -353,6 +353,32 @@ would promote a rule whose right hand side is merely a popular product:
 **Swagger UI** at `/try`. The analytics endpoints, with "Try it out" on each:
 
 ![Swagger UI listing the Ensights API](documents/screenshots/swagger-try.jpg)
+
+## Periodic Tasks
+
+- **RedBeat**: Redis-backed Celery beat scheduler, safe to run more than one beat instance
+
+The schedule lives in `app/celery_app.py` under `beat_schedule`. Beat reads it
+at startup and enqueues each entry when it comes due, a worker then runs it.
+Beat only schedules, it never executes, so both processes have to be running.
+
+This project uses **RedBeat**. The schedule is stored in Redis and beat takes a
+Redis lock on startup, so several beat instances can run at once and only the
+lock holder fires each tick. That is what makes a rolling deploy or a
+`replicas: 2` beat deployment safe.
+
+Beat must be started with the scheduler flag. Without `-S
+redbeat.RedBeatScheduler` you get Celery's default scheduler, RedBeat's
+startup hook then looks for a `lock_key` that scheduler does not have, and the
+resulting `AttributeError` is swallowed, so you silently lose the lock while
+believing you have it:
+
+```bash
+celery -A app.celery_app beat -S redbeat.RedBeatScheduler -l info
+```
+
+Entries can be added or changed at runtime through `redbeat.RedBeatSchedulerEntry`
+without restarting beat.
 
 ## Exporting the thesis PDF
 

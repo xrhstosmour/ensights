@@ -21,6 +21,8 @@ from app.schemas.files import FileUploadResponse
 from app.schemas.files import FileUrlResponse
 from app.services.file_service import FileService
 from app.services.file_service import FileServiceError
+from app.services.file_service import FileTooLargeError
+from app.services.file_service import FileTypeMismatchError
 
 router = APIRouter(prefix="/files", tags=["Files"])
 logger = get_logger("api.files")
@@ -37,7 +39,6 @@ async def upload_file(
     file: UploadFile,
     current_user: CurrentUser,
     session: SessionDependency,
-    is_public: bool = False,
     resource_type: str | None = None,
     resource_id: str | None = None,
 ) -> FileUploadResponse:
@@ -48,19 +49,28 @@ async def upload_file(
     re-uploading.
     """
     service = FileService(session)
-    record = await service.upload(
-        file=file,
-        user=current_user,
-        is_public=is_public,
-        resource_type=resource_type,
-        resource_id=resource_id,
-    )
+    try:
+        record = await service.upload(
+            file=file,
+            user=current_user,
+            resource_type=resource_type,
+            resource_id=resource_id,
+        )
+    except FileTooLargeError as e:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=str(e),
+        ) from e
+    except FileTypeMismatchError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        ) from e
     return FileUploadResponse(
         id=record.id,
         filename=record.filename,
         mimetype=record.mimetype,
         size=record.size,
-        is_public=record.is_public,
     )
 
 
@@ -119,7 +129,6 @@ async def get_file_metadata(
         mimetype=record.mimetype,
         size=record.size,
         content_hash=record.content_hash,
-        is_public=record.is_public,
         image_width=record.image_width,
         image_height=record.image_height,
         resource_type=record.resource_type,

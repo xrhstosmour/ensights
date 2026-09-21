@@ -20,7 +20,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core import SYSTEM_TENANT_ID
 from app.core.logging import get_logger
 from app.core.security import DUMMY_PASSWORD_HASH
+from app.core.security import TokenRateLimitError
 from app.core.security import blacklist_token
+from app.core.security import claim_token_for_rotation
 from app.core.security import create_access_token
 from app.core.security import create_refresh_token
 from app.core.security import decode_token
@@ -121,6 +123,30 @@ class AuthService:
         expires_at = datetime.fromtimestamp(token_expiration, tz=UTC)
         await blacklist_token(token_identifier, expires_at)
 
+    @staticmethod
+    async def _claim_payload_token(payload: dict[str, Any]) -> bool:
+        """Atomically blacklist a decoded token, reporting whether we won.
+
+        Args:
+            payload: Decoded JWT payload.
+
+        Returns:
+            True when this caller claimed the token, False when it had
+            already been used. A payload without usable claims cannot be
+            claimed and is treated as won, matching the previous
+            behaviour of `_blacklist_payload_token`.
+        """
+        token_identifier = payload.get("jti")
+        token_expiration = payload.get("exp")
+
+        if not isinstance(token_identifier, str):
+            return True
+        if not isinstance(token_expiration, (int, float)):
+            return True
+
+        expires_at = datetime.fromtimestamp(token_expiration, tz=UTC)
+        return await claim_token_for_rotation(token_identifier, expires_at)
+
     async def _update_password_and_invalidate(
         self, user: User, new_password: str
     ) -> None:
@@ -186,7 +212,7 @@ class AuthService:
         except Exception:
             logger.warning(
                 "email_task_dispatch_failed",
-                to_email=user.email,
+                user_id=str(user.id),
                 subject=subject,
             )
 
@@ -253,14 +279,49 @@ class AuthService:
         if not user:
             # Verify against dummy hash to prevent timing attacks.
             await asyncio.to_thread(verify_password, password, DUMMY_PASSWORD_HASH)
+            # No account, and so no tenant, exists for this email: falls
+            # back to SYSTEM_TENANT_ID, the same well-known tenant used
+            # elsewhere in this service for actors without one yet (see
+            # verify_magic_link and google_login).
+            await self.audit_repository.log_user_action_safe(
+                action=AuditAction.LOGIN_FAILED,
+                user_id="unknown",
+                tenant_id=SYSTEM_TENANT_ID,
+                email=email,
+                status="failure",
+            )
+            # `log_user_action_safe` only writes inside a SAVEPOINT; the
+            # session-scoped commit that normally follows a route never
+            # runs here because this method raises immediately below,
+            # which rolls the whole transaction (savepoint included) back
+            # instead. Commit explicitly so the audit trail this is for
+            # actually survives the failed request.
+            await self.session.commit()
             raise InvalidCredentialsError("Invalid email or password")
 
         # Verify password.
         if not await asyncio.to_thread(verify_password, password, user.hashed_password):
+            await self.audit_repository.log_user_action_safe(
+                action=AuditAction.LOGIN_FAILED,
+                user_id=user.id,
+                tenant_id=user.tenant_id or SYSTEM_TENANT_ID,
+                email=user.email,
+                status="failure",
+            )
+            await self.session.commit()
             raise InvalidCredentialsError("Invalid email or password")
 
         # Check if active.
         if not user.is_active:
+            await self.audit_repository.log_user_action_safe(
+                action=AuditAction.LOGIN_FAILED,
+                user_id=user.id,
+                tenant_id=user.tenant_id or SYSTEM_TENANT_ID,
+                email=user.email,
+                status="failure",
+                error_message="inactive",
+            )
+            await self.session.commit()
             raise UserInactiveError("User account is inactive")
 
         # Log successful login.
@@ -384,13 +445,23 @@ class AuthService:
             if token_version is not None and token_version != user.token_version:
                 raise AuthenticationError("Token invalidated due to password change")
 
-            token_response = self.create_tokens(user)
-            # Only the refresh token is blacklisted.  Access tokens are
+            # Claim the old token before minting its replacement, in one
+            # atomic operation. Checking the blacklist above and writing to
+            # it afterwards left a window where two concurrent refreshes
+            # both passed the check and both got a fresh pair, so a stolen
+            # token replayed alongside the real one succeeded and the
+            # blacklist caught nothing.
+            #
+            # Placed after every read-only validation so a rejected refresh
+            # does not burn a token that was never exchanged.
+            #
+            # Only the refresh token is blacklisted. Access tokens are
             # short-lived and expire naturally; blacklisting them adds
             # Redis overhead with minimal security benefit.
-            await self._blacklist_payload_token(payload)
+            if not await self._claim_payload_token(payload):
+                raise AuthenticationError("Refresh token has been revoked")
 
-            return token_response
+            return self.create_tokens(user)
 
         except (
             InvalidTokenError,
@@ -529,6 +600,13 @@ class AuthService:
         prevent user enumeration, callers should always return 204.
         Generates a single-use Redis-backed token with a 1-hour TTL.
 
+        The per-user cooldown is swallowed for the same reason. It only
+        fires for addresses that exist, so letting it surface turned the
+        endpoint into an enumeration oracle: submit an address twice and a
+        429 on the second attempt meant the account was real, while two
+        204s meant it was not. The cooldown still does its job, no second
+        email goes out, it just stops being observable from outside.
+
         Args:
             email: Email address of the account to reset.
         """
@@ -539,14 +617,19 @@ class AuthService:
             # Do not reveal whether the account exists.
             return
 
-        await self._send_token_email(
-            user=user,
-            token_factory=create_password_reset_token(user.id),
-            url_path="/auth/reset-password",
-            subject=f"Reset your password, {settings.PROJECT_NAME}",
-            template_name="password_reset.html",
-            url_field_name="reset_url",
-        )
+        try:
+            await self._send_token_email(
+                user=user,
+                token_factory=create_password_reset_token(user.id),
+                url_path="/auth/reset-password",
+                subject=f"Reset your password, {settings.PROJECT_NAME}",
+                template_name="password_reset.html",
+                url_field_name="reset_url",
+            )
+        except TokenRateLimitError:
+            logger.info("password_reset_email_throttled", user_id=str(user.id))
+            return
+
         logger.info("password_reset_email_queued", user_id=str(user.id))
 
     async def reset_password(self, token: str, new_password: str) -> None:
@@ -753,7 +836,9 @@ class AuthService:
         """Queue a passwordless login link email if the account exists.
 
         Silently does nothing when the email is not registered to
-        prevent user enumeration, callers should always return 204.
+        prevent user enumeration, callers should always return 204. The
+        per-user cooldown is swallowed for the same reason, see
+        ``send_password_reset_email``.
 
         Args:
             email: Email address of the account to send the link to.
@@ -764,14 +849,19 @@ class AuthService:
         if not user:
             return
 
-        await self._send_token_email(
-            user=user,
-            token_factory=create_magic_link_token(user.id),
-            url_path="/auth/magic-link",
-            subject=f"Sign in to {settings.PROJECT_NAME}",
-            template_name="magic_link.html",
-            url_field_name="login_url",
-        )
+        try:
+            await self._send_token_email(
+                user=user,
+                token_factory=create_magic_link_token(user.id),
+                url_path="/auth/magic-link",
+                subject=f"Sign in to {settings.PROJECT_NAME}",
+                template_name="magic_link.html",
+                url_field_name="login_url",
+            )
+        except TokenRateLimitError:
+            logger.info("magic_link_throttled", user_id=str(user.id))
+            return
+
         logger.info("magic_link_sent", user_id=str(user.id))
 
     async def verify_magic_link(self, token: str) -> LoginResponse:

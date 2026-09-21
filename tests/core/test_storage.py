@@ -182,6 +182,77 @@ class TestGetDownloadUrl:
         _, kwargs = mock_s3_client.generate_presigned_url.call_args
         assert kwargs.get("ExpiresIn") == 900
 
+    @pytest.mark.asyncio
+    async def test_non_image_forces_attachment_disposition(
+        self, mock_s3_client: MagicMock
+    ) -> None:
+        """A non-image mimetype must not render inline in a browser.
+
+        Otherwise an uploaded HTML/SVG file served back under its own
+        content type would execute in the viewer's origin.
+        """
+        await get_download_url(
+            object_key="test-key", mimetype="text/html", filename="page.html"
+        )
+
+        _, kwargs = mock_s3_client.generate_presigned_url.call_args
+        disposition = kwargs["Parameters"]["ResponseContentDisposition"]
+        assert disposition == (
+            "attachment; filename=\"page.html\"; filename*=UTF-8''page.html"
+        )
+
+    @pytest.mark.asyncio
+    async def test_svg_forces_attachment_disposition(
+        self, mock_s3_client: MagicMock
+    ) -> None:
+        """`image/svg+xml` must not render inline either.
+
+        Regression: the original check was `not mimetype.startswith(
+        "image/")`, and `image/svg+xml` matches that prefix despite SVG
+        being able to embed `<script>` that executes on inline render,
+        the exact class of vulnerability this is meant to prevent.
+        """
+        await get_download_url(
+            object_key="test-key", mimetype="image/svg+xml", filename="logo.svg"
+        )
+
+        _, kwargs = mock_s3_client.generate_presigned_url.call_args
+        assert "attachment" in kwargs["Parameters"]["ResponseContentDisposition"]
+
+    @pytest.mark.asyncio
+    async def test_image_mimetype_does_not_force_attachment(
+        self, mock_s3_client: MagicMock
+    ) -> None:
+        """Images on the inline-safe allowlist may still render inline."""
+        await get_download_url(object_key="test-key", mimetype="image/png")
+
+        _, kwargs = mock_s3_client.generate_presigned_url.call_args
+        assert "ResponseContentDisposition" not in kwargs["Parameters"]
+
+    @pytest.mark.asyncio
+    async def test_no_mimetype_does_not_force_attachment(
+        self, mock_s3_client: MagicMock
+    ) -> None:
+        """Without a mimetype (e.g. thumbnails), behavior is unchanged."""
+        await get_download_url(object_key="test-key")
+
+        _, kwargs = mock_s3_client.generate_presigned_url.call_args
+        assert "ResponseContentDisposition" not in kwargs["Parameters"]
+
+    @pytest.mark.asyncio
+    async def test_non_ascii_filename_is_encoded_not_mangled(
+        self, mock_s3_client: MagicMock
+    ) -> None:
+        """A non-ASCII filename must round-trip via `filename*`, not mangle
+        the quoted ASCII fallback."""
+        await get_download_url(
+            object_key="test-key", mimetype="text/plain", filename="résumé.txt"
+        )
+
+        _, kwargs = mock_s3_client.generate_presigned_url.call_args
+        disposition = kwargs["Parameters"]["ResponseContentDisposition"]
+        assert "filename*=UTF-8''r%C3%A9sum%C3%A9.txt" in disposition
+
 
 class TestS3Client:
     """Tests for _s3_client()."""
@@ -290,6 +361,79 @@ class TestBuildThumbnail:
         ):
             _build_thumbnail(b"not-actually-an-image", "image/png")
 
+    def test_applies_max_image_pixels_guard(self) -> None:
+        """PIL's decode-bomb guard is set from `MAX_IMAGE_PIXELS`, not left
+        at PIL's own much higher default.
+
+        Set once rather than saved/restored per call: every caller wants
+        the same cap, and a per-call save/restore would race under
+        concurrent `asyncio.to_thread` calls.
+        """
+        import PIL.Image
+
+        from app.core.storage import MAX_IMAGE_PIXELS
+
+        observed: dict[str, int | None] = {}
+
+        def fake_open(_data: object) -> MagicMock:
+            observed["limit"] = PIL.Image.MAX_IMAGE_PIXELS
+            mock_img = MagicMock()
+            mock_img.size = (10, 10)
+            mock_img.copy.return_value = mock_img
+            return mock_img
+
+        with patch("PIL.Image.open", side_effect=fake_open):
+            _build_thumbnail(b"fake-image-data", "image/png")
+
+        assert observed["limit"] == MAX_IMAGE_PIXELS
+        assert PIL.Image.MAX_IMAGE_PIXELS == MAX_IMAGE_PIXELS
+
+    def test_decompression_bomb_raises_pil_error(self) -> None:
+        """A decompression bomb surfaces as `PIL.Image.DecompressionBombError`
+        so the caller (the thumbnail task) can handle it explicitly."""
+        import PIL.Image
+
+        with (
+            patch(
+                "PIL.Image.open",
+                side_effect=PIL.Image.DecompressionBombError("image too large"),
+            ),
+            pytest.raises(PIL.Image.DecompressionBombError),
+        ):
+            _build_thumbnail(b"huge-image-data", "image/png")
+
+    def test_decompression_bomb_warning_band_also_raises(self) -> None:
+        """An image between 1x and 2x `MAX_IMAGE_PIXELS` must also be
+        rejected, not silently decoded.
+
+        Regression: PIL only raises `DecompressionBombError` above 2x
+        `MAX_IMAGE_PIXELS`, between 1x and 2x it only emits
+        `DecompressionBombWarning` (via `warnings.warn`) and decodes
+        anyway, which would have let an image up to twice the intended
+        cap through. `_build_thumbnail` must escalate that warning to an
+        exception, not just handle a warning PIL never actually raises
+        this way in the test.
+        """
+        import warnings
+
+        import PIL.Image
+
+        def fake_open(_data: object) -> MagicMock:
+            warnings.warn(
+                PIL.Image.DecompressionBombWarning("image too large for cache limit"),
+                stacklevel=1,
+            )
+            mock_img = MagicMock()
+            mock_img.size = (10, 10)
+            mock_img.copy.return_value = mock_img
+            return mock_img
+
+        with (
+            patch("PIL.Image.open", side_effect=fake_open),
+            pytest.raises(PIL.Image.DecompressionBombWarning),
+        ):
+            _build_thumbnail(b"big-image-data", "image/png")
+
 
 class TestUploadObject:
     """Tests for upload_object()."""
@@ -337,21 +481,46 @@ class TestDeleteObject:
     """Tests for delete_object()."""
 
     @pytest.mark.asyncio
-    async def test_delete_object_idempotent_on_client_error(
+    async def test_delete_object_idempotent_when_already_gone(
         self, mock_s3_client: MagicMock
     ) -> None:
-        """Should not raise when ClientError occurs (already deleted)."""
+        """A missing object is not an error, the delete is idempotent."""
+        mock_s3_client.delete_object.side_effect = _client_error(
+            "NoSuchKey", "DeleteObject"
+        )
 
-        # Define a local ClientError class (botocore may not be installed directly).
-        class ClientError(Exception):
-            pass
-
-        mock_s3_client.exceptions.ClientError = ClientError
-        mock_s3_client.delete_object.side_effect = ClientError("NoSuchKey")
-
-        # Should not raise.
         await delete_object(object_key="non-existent-key")
 
         mock_s3_client.delete_object.assert_called_once_with(
             Bucket=ANY, Key="non-existent-key"
         )
+
+    @pytest.mark.asyncio
+    async def test_delete_object_raises_on_access_denied(
+        self, mock_s3_client: MagicMock
+    ) -> None:
+        """A denied delete must not be reported as a successful one.
+
+        This replaces a test that asserted the opposite. Swallowing every
+        `ClientError` meant a bucket policy without `s3:DeleteObject`
+        turned the purge into a silent no-op, the row went away, the blob
+        stayed, and nothing was logged.
+        """
+        mock_s3_client.delete_object.side_effect = _client_error(
+            "AccessDenied", "DeleteObject"
+        )
+
+        with pytest.raises(ClientError):
+            await delete_object(object_key="uploads/abc123")
+
+    @pytest.mark.asyncio
+    async def test_delete_object_raises_on_an_unexpected_error(
+        self, mock_s3_client: MagicMock
+    ) -> None:
+        """Any other failure surfaces too, rather than reading as success."""
+        mock_s3_client.delete_object.side_effect = _client_error(
+            "InternalError", "DeleteObject"
+        )
+
+        with pytest.raises(ClientError):
+            await delete_object(object_key="uploads/abc123")

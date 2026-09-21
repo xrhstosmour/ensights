@@ -13,8 +13,13 @@ FROM python:3.14-alpine@sha256:26730869004e2b9c4b9ad09cab8625e81d256d1ce97e72df5
 
 WORKDIR /app
 
+# `/app` stays root-owned so the running user cannot rewrite its own code.
+# `celery beat` needs somewhere to write its schedule though, and its default
+# is the working directory, so give it a directory of its own.
 RUN apk add --no-cache libpq ca-certificates tzdata curl \
-    && adduser -D -s /bin/sh appuser
+    && adduser -D -s /bin/sh appuser \
+    && mkdir -p /var/lib/celery \
+    && chown appuser:appuser /var/lib/celery
 
 COPY --from=builder --chown=appuser:appuser /app/.venv /app/.venv
 COPY --chown=appuser:appuser pyproject.toml uv.lock alembic.ini ./
@@ -32,7 +37,13 @@ USER appuser
 
 EXPOSE 8000
 
+# Probes /ready, not /live. Docker's health status is what
+# `depends_on: service_healthy` waits on, so it is a readiness signal, and
+# /live returns 200 unconditionally as long as the process is up. A
+# container whose database was unreachable reported healthy and was handed
+# traffic it could not serve. /ready runs a `SELECT 1` and answers 503 when
+# it cannot.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-    CMD curl -f http://localhost:8000/api/v1/live || exit 1
+    CMD curl -f http://localhost:8000/api/v1/ready || exit 1
 
 CMD ["fastapi", "run", "app/main.py", "--host", "0.0.0.0", "--port", "8000"]

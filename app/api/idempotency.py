@@ -8,6 +8,8 @@ response is replayed instead.
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import hashlib
 import re
 from typing import TYPE_CHECKING
@@ -19,6 +21,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.base import RequestResponseEndpoint
 from starlette.responses import Response
 
+from app.core.idempotency import LOCK_HEARTBEAT_INTERVAL_SECONDS
 from app.core.idempotency import CachedResponse
 from app.core.idempotency import idempotency_service
 from app.core.logging import get_logger
@@ -88,14 +91,14 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
             )
 
         try:
-            locked = await idempotency_service.try_lock(scoped_key)
+            token = await idempotency_service.try_lock(scoped_key)
         except Exception:
             logger.exception("idempotency_unavailable", key=scoped_key)
             return JSONResponse(
                 status_code=503,
                 content={"detail": "Idempotency service temporarily unavailable"},
             )
-        if not locked:
+        if token is None:
             return JSONResponse(
                 status_code=409,
                 content={
@@ -103,6 +106,13 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
                 },
             )
 
+        # `LOCK_TTL_SECONDS` bounds how long the lock can outlive a crashed
+        # worker, but a slow-but-healthy handler can legitimately run
+        # longer than that. This heartbeat keeps the lock alive for as
+        # long as `call_next` is actually in flight, refreshing its TTL
+        # well before it would otherwise expire and let a retry with the
+        # same key slip past `try_lock()` mid-request.
+        heartbeat_task = asyncio.create_task(self._heartbeat(scoped_key, token))
         try:
             response = await call_next(request)
             body_bytes, _ = await self._buffer_and_cache(scoped_key, response)
@@ -115,13 +125,50 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
                 )
             return response
         finally:
-            await idempotency_service.release_lock(scoped_key)
+            heartbeat_task.cancel()
+            # A cancellation delivered to *this* task (e.g. the client
+            # disconnected) surfaces here as the same `CancelledError`
+            # `await heartbeat_task` raises for the heartbeat's own
+            # cancellation, suppressing it unconditionally would also
+            # swallow that outer cancellation and let `release_lock`
+            # below run to completion instead of the task actually
+            # stopping. Only suppress when it's specifically the
+            # heartbeat's cancellation being observed.
+            current = asyncio.current_task()
+            with contextlib.suppress(asyncio.CancelledError):
+                await heartbeat_task
+            if current is not None and current.cancelling():
+                raise
+            await idempotency_service.release_lock(scoped_key, token)
+
+    @staticmethod
+    async def _heartbeat(raw_key: str, token: str) -> None:
+        """Periodically refresh the idempotency lock's TTL for *raw_key*.
+
+        Runs for the lifetime of the guarded request; cancelled by the
+        caller once `call_next` returns (or raises).
+        """
+        while True:
+            await asyncio.sleep(LOCK_HEARTBEAT_INTERVAL_SECONDS)
+            await idempotency_service.extend_lock(raw_key, token)
 
     @staticmethod
     async def _buffer_and_cache(
         raw_key: str, response: Response
     ) -> tuple[bytes | None, bool]:
-        if response.status_code >= 500:
+        # Only successes and redirects are replayable. Caching 4xx too meant
+        # a transient rejection stuck to the key for
+        # `IDEMPOTENCY_TTL_HOURS` (24 by default): a 429 from the rate
+        # limiter, or a 401 from an expired token, was replayed for the rest
+        # of the day even once the client had waited or re-authenticated,
+        # and a 422 kept being returned after the payload was corrected. The
+        # only escape was to change the idempotency key, which is exactly
+        # what the key exists to make unnecessary.
+        #
+        # Nothing is lost by not caching them. Idempotency exists to stop a
+        # retry repeating a side effect, and a rejected request did not have
+        # one to repeat.
+        if response.status_code >= 400:
             return None, False
 
         body: Any = []
