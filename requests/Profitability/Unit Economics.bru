@@ -1,0 +1,22 @@
+meta {
+  name: Unit Economics
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/v1/profitability/unit-economics
+  body: none
+  auth: inherit
+}
+
+params:query {
+  ~gross_margin: 0.5
+  ~customer_acquisition_cost: 0
+  ~start:
+  ~end:
+}
+
+docs {
+  `/api/v1/profitability`: LTV, CAC, and unit-economics sensitivity grids.
+}

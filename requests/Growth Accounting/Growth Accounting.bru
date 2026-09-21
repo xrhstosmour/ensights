@@ -1,0 +1,21 @@
+meta {
+  name: Growth Accounting
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/v1/growth-accounting
+  body: none
+  auth: inherit
+}
+
+params:query {
+  ~granularity: month
+  ~start:
+  ~end:
+}
+
+docs {
+  `/api/v1/growth-accounting`: revenue decomposed into new/retained/churned flows.
+}

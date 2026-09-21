@@ -1,0 +1,20 @@
+meta {
+  name: Customer Summary
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/v1/business-metrics/customer-summary
+  body: none
+  auth: inherit
+}
+
+params:query {
+  ~start:
+  ~end:
+}
+
+docs {
+  `/api/v1/business-metrics`: GMV, repeat-purchase rate, cohort retention, RFM.
+}

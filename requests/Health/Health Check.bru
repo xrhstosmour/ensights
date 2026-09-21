@@ -1,0 +1,15 @@
+meta {
+  name: Health Check
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/v1/health
+  body: none
+  auth: none
+}
+
+docs {
+  `/api/v1/health`: confirms the API, database, and Redis are up, no auth needed.
+}

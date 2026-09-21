@@ -1,0 +1,22 @@
+meta {
+  name: Segmentation
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/v1/segmentation
+  body: none
+  auth: inherit
+}
+
+params:query {
+  ~minimum_k: 2
+  ~maximum_k: 6
+  ~start:
+  ~end:
+}
+
+docs {
+  `/api/v1/segmentation`: customer clustering (region/time, then RFM).
+}
