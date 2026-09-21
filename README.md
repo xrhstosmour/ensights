@@ -73,9 +73,9 @@ disclaimer with it.
 One thing to know before starting: the containers, volumes and network are
 named after the project, `ensights-postgresql`, `ensights-redis` and so on, so
 another project generated from the same template no longer shares this one's
-database. That was a real hazard until
-[yap#176](https://github.com/xrhstosmour/yap/pull/176), because the names were
-global and a second stack silently attached to the first one's data.
+database. That was a real hazard before the naming was scoped per project,
+because the names were global and a second stack silently attached to the
+first one's data.
 
 Host ports are still shared, though. This stack publishes 5432, 6379, 5672 and
 3000, so a second project on its defaults collides there and the second one to
