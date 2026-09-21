@@ -1,0 +1,22 @@
+meta {
+  name: Revenue Forecast
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/v1/forecasting/revenue?horizon=3
+  body: none
+  auth: inherit
+}
+
+params:query {
+  horizon: 3
+  ~granularity: month
+  ~method: exponential_smoothing
+  ~seasonal: true
+}
+
+docs {
+  `/api/v1/forecasting`: revenue forecasts vs. a naive baseline.
+}

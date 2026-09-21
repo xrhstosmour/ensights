@@ -141,7 +141,11 @@ include_mailpit=$(has_extra "mailpit")
 include_redis_commander=$(has_extra "redis_commander")
 include_flower=$(has_extra "flower")
 include_minio=$(has_extra "minio")
-include_redbeat=$(grep -q "redbeat" pyproject.toml 2>/dev/null && echo "true" || echo "false")
+# Read from the compose command, not from pyproject.toml. `celery-redbeat` is
+# an unconditional dependency, so grepping pyproject matched every project and
+# flipped this to true on every sync, whatever the user had chosen. The
+# scheduler named in docker-compose.app.yml is the thing that actually varies.
+include_redbeat=$(grep -q "RedBeatScheduler" docker-compose.app.yml 2>/dev/null && echo "true" || echo "false")
 
 # Resolve nested mode from repository layout.
 nested="false"
@@ -170,6 +174,16 @@ _target=$(git ls-remote "https://github.com/xrhstosmour/yap.git" HEAD | cut -f1)
 if [ -z "$_target" ]; then
     error "Could not resolve the latest 'YAP' commit to sync to"
 fi
+
+# Create it empty and lock it down before a single secret goes in. `cat >`
+# alone leaves it at 0644 under the default umask, and this file carries the
+# JWT signing key, the Fernet key and every service password. It is
+# short-lived, the EXIT trap below removes it, but the window spans a
+# `copier update` with network calls, and on a shared machine that is long
+# enough for any other local user to read it. Truncating an existing file
+# does not reset its mode, so the redirect below keeps 0600.
+: > .copier/.answers.yml
+chmod 600 .copier/.answers.yml
 
 cat > .copier/.answers.yml << YAML
 _src_path: gh:xrhstosmour/yap
@@ -236,9 +250,21 @@ if ! git rev-parse --git-dir >/dev/null 2>&1; then
     TEMP_GIT=true
 fi
 
-# Ensure a stale /tmp/containers from a previous run does not block the old
-# template version's assemble.py from cloning fresh.
-python3 -c "import shutil; shutil.rmtree('/tmp/containers', ignore_errors=True)"
+# Ensure a stale cache from a previous run does not block assemble.py from
+# cloning fresh. Both paths are cleared: the old shared `/tmp/containers`,
+# which the template used before the cache moved per-user, and the current
+# one, since the version of assemble.py that runs here is whichever the
+# project is still on.
+python3 - <<'PY'
+import os
+import shutil
+
+cache = os.environ.get("XDG_CACHE_HOME") or os.path.join(
+    os.path.expanduser("~"), ".cache"
+)
+for path in ("/tmp/containers", os.path.join(cache, "yap", "containers")):
+    shutil.rmtree(path, ignore_errors=True)
+PY
 
 # Sync mode: the setup.sh task only ensures .env and skips services/migrations,
 # so a template synchronize never requires Docker or a live database.
@@ -270,7 +296,18 @@ info "Running copier update..."
 
     echo ""
     info "Checking for changes..."
-    if git diff --stat; then
+
+    # `git diff --stat` exits 0 whether or not anything differs, so the "no
+    # changes" branch was unreachable and a sync that changed nothing still
+    # told the user to review and commit. `git status --porcelain` reports
+    # the truth, and unlike `git diff` it also sees the files a template
+    # update adds, which are exactly the ones worth looking at.
+    changes=$(git status --porcelain 2>/dev/null || true)
+
+    if [ "$TEMP_GIT" = true ]; then
+        info "Project updated. This directory is not tracked by git, so there is nothing to diff."
+    elif [ -n "$changes" ]; then
+        git status --short
         echo ""
         info "Review changes, resolve any inline conflict markers (<<<<<<<), then commit."
         echo "  git diff"

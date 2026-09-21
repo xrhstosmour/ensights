@@ -56,14 +56,11 @@ async def list_users(
     """
     service = UserService(session)
 
-    from app.models.user import UserRole
-
-    role = UserRole(parameters.role) if parameters.role else None
     users, total = await service.list_users(
         skip=parameters.skip,
         limit=parameters.limit,
         is_active=parameters.is_active,
-        role=role,
+        role=parameters.role,
         search=parameters.search,
     )
 
@@ -214,7 +211,11 @@ async def create_user(
     service = UserService(session)
 
     try:
-        user = await service.create(data, created_by=current_user.id)
+        user = await service.create(
+            data,
+            created_by=current_user.id,
+            creator_tenant_id=current_user.tenant_id,
+        )
         return UserResponse.model_validate(user)
     except (ValueError, UserServiceError) as e:
         raise HTTPException(

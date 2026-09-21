@@ -80,6 +80,18 @@ GLITCHTIP_SECRET_KEY="${GLITCHTIP_SECRET_KEY:-$(python3 -c "import secrets; prin
 REDIS_COMMANDER_PASSWORD="${REDIS_COMMANDER_PASSWORD:-$(python3 -c "import secrets; print(secrets.token_urlsafe(12))")}"
 METABASE_READ_ONLY_PASSWORD="${METABASE_READ_ONLY_PASSWORD:-$(python3 -c "import secrets; print(secrets.token_urlsafe(16))")}"
 STORAGE_SECRET_KEY="${STORAGE_SECRET_KEY:-$(python3 -c "import secrets; print(secrets.token_urlsafe(32))")}"
+# MINIO_ROOT_USER is a real admin credential, not a display name, the
+# well-known "minioadmin" default halves what an attacker has to guess
+# once the password is randomized. Generated and backfilled the same way
+# as MINIO_ROOT_PASSWORD, not left fixed.
+#
+# Upgrade hazard on an EXISTING deployment: MinIO treats the root user as
+# env-driven, so rotating this on a project whose MinIO volume already
+# holds data can orphan any service account or policy created under the
+# old "minioadmin" root. Confirm the app's storage client credential
+# (STORAGE_ACCESS_KEY/STORAGE_SECRET_KEY) still authenticates before
+# rolling this out to a running deployment, not just a fresh one.
+MINIO_ROOT_USER="${MINIO_ROOT_USER:-$(python3 -c "import secrets; print(secrets.token_urlsafe(12))")}"
 MINIO_ROOT_PASSWORD="${MINIO_ROOT_PASSWORD:-$(python3 -c "import secrets; print(secrets.token_urlsafe(16))")}"
 # .env.example always carries the project's real POSTGRESQL_USER (== project_slug,
 # baked in by Copier at render time), even before .env exists on a fresh clone.
@@ -98,6 +110,11 @@ else
     info "Backfilling any placeholder secrets in existing .env..."
 fi
 
+# `cp` and the default umask leave this at 0644, and it holds the JWT signing
+# key, the Fernet key and every service password, permanently. Applied on
+# every run, not just on creation, so an existing project is tightened too.
+chmod 600 .env
+
 # Reset .env.example back to placeholders so real secrets never leak into it.
 # Unconditional on purpose: `copier update` (see synchronize.sh) re-renders
 # .env.example from the real answers on every sync, and .env already exists on
@@ -111,6 +128,7 @@ fi
 "${SED_INPLACE[@]}" "s/RABBITMQ_ERLANG_COOKIE=.*/RABBITMQ_ERLANG_COOKIE=your-rabbitmq-erlang-cookie/" .env.example
 "${SED_INPLACE[@]}" "s/REDIS_PASSWORD=.*/REDIS_PASSWORD=your-redis-password/" .env.example
 "${SED_INPLACE[@]}" "s/FLOWER_PASSWORD=.*/FLOWER_PASSWORD=your-flower-password/" .env.example
+"${SED_INPLACE[@]}" "s/TRAEFIK_DASHBOARD_PASSWORD=.*/TRAEFIK_DASHBOARD_PASSWORD=your-traefik-dashboard-password/" .env.example
 "${SED_INPLACE[@]}" "s/PGADMIN4_PASSWORD=.*/PGADMIN4_PASSWORD=your-pgadmin-password/" .env.example
 "${SED_INPLACE[@]}" "s/GLITCHTIP_SECRET_KEY=.*/GLITCHTIP_SECRET_KEY=your-glitchtip-secret-key/" .env.example
 "${SED_INPLACE[@]}" "s/REDIS_COMMANDER_PASSWORD=.*/REDIS_COMMANDER_PASSWORD=your-redis-commander-password/" .env.example
@@ -122,6 +140,74 @@ fi
 "${SED_INPLACE[@]}" "s|^REDIS_URL=.*|REDIS_URL=redis://:your-redis-password@redis:6379/0|" .env.example
 "${SED_INPLACE[@]}" "s/MINIO_ROOT_PASSWORD=.*/MINIO_ROOT_PASSWORD=minioadmin/" .env.example
 "${SED_INPLACE[@]}" "s/SENTRY_DSN=.*/SENTRY_DSN=https:\/\/public:secret@sentry.com\/1/" .env.example
+
+# Write KEY=VALUE into an environment file, treating VALUE as literal text.
+#
+# `sed` interprets its replacement: a bare `&` expands to the whole match and
+# the delimiter character ends the expression early, so a secret supplied from
+# the environment containing either was silently corrupted. `p&ss|word` landed
+# in `.env` as `pSMTP_PASSWORD=your-smtp-passwordss`, with `sed` exiting 0.
+#
+# The value travels in the environment rather than in argv, so it never shows
+# up in `ps` output while this runs.
+set_environment_value() {
+    SET_KEY="$1" SET_VALUE="$2" SET_FILE="$3" python3 - <<'PY'
+import os
+
+key = os.environ["SET_KEY"]
+value = os.environ["SET_VALUE"]
+path = os.environ["SET_FILE"]
+prefix = f"{key}="
+
+with open(path) as handle:
+    lines = handle.readlines()
+
+for index, line in enumerate(lines):
+    if line.startswith(prefix):
+        lines[index] = f"{prefix}{value}\n"
+        break
+else:
+    if lines and not lines[-1].endswith("\n"):
+        lines[-1] += "\n"
+    lines.append(f"{prefix}{value}\n")
+
+with open(path, "w") as handle:
+    handle.writelines(lines)
+PY
+}
+
+# Replace the password inside a URL-valued key, again literally. The user, the
+# host and everything after them are kept exactly as they are.
+set_url_password() {
+    SET_KEY="$1" SET_VALUE="$2" SET_FILE="$3" python3 - <<'PY'
+import os
+
+key = os.environ["SET_KEY"]
+password = os.environ["SET_VALUE"]
+path = os.environ["SET_FILE"]
+prefix = f"{key}="
+
+with open(path) as handle:
+    lines = handle.readlines()
+
+for index, line in enumerate(lines):
+    if not line.startswith(prefix):
+        continue
+    url = line[len(prefix) :].rstrip("\n")
+    scheme, separator, rest = url.partition("://")
+    if not separator or "@" not in rest:
+        break
+    # The host never contains an `@`, an old password might, so split on the
+    # last one.
+    credentials, _, location = rest.rpartition("@")
+    user, _, _ = credentials.partition(":")
+    lines[index] = f"{prefix}{scheme}://{user}:{password}@{location}\n"
+    break
+
+with open(path, "w") as handle:
+    handle.writelines(lines)
+PY
+}
 
 # Replace KEY's value only when it is empty, a placeholder ("your-..."), or
 # matches the optional extra placeholder (e.g. a well-known service default).
@@ -138,11 +224,11 @@ backfill_secret() {
     current="$(sed -n "s/^${key}=//p" .env | head -1)"
     case "$current" in
         "" | your-*)
-            "${SED_INPLACE[@]}" "s|^${key}=.*|${key}=${value}|" .env
+            set_environment_value "$key" "$value" .env
             ;;
         *)
             if [ -n "$extra_placeholder" ] && [ "$current" = "$extra_placeholder" ]; then
-                "${SED_INPLACE[@]}" "s|^${key}=.*|${key}=${value}|" .env
+                set_environment_value "$key" "$value" .env
             fi
             ;;
     esac
@@ -162,6 +248,7 @@ backfill_secret GLITCHTIP_SECRET_KEY "${GLITCHTIP_SECRET_KEY}"
 backfill_secret REDIS_COMMANDER_PASSWORD "${REDIS_COMMANDER_PASSWORD}"
 backfill_secret METABASE_READ_ONLY_PASSWORD "${METABASE_READ_ONLY_PASSWORD}"
 backfill_secret STORAGE_SECRET_KEY "${STORAGE_SECRET_KEY}"
+backfill_secret MINIO_ROOT_USER "${MINIO_ROOT_USER}" "minioadmin"
 backfill_secret MINIO_ROOT_PASSWORD "${MINIO_ROOT_PASSWORD}" "minioadmin"
 backfill_secret MINIO_DEFAULT_BUCKET "${MINIO_DEFAULT_BUCKET}"
 backfill_secret GOOGLE_CLIENT_SECRET "${GOOGLE_CLIENT_SECRET}"
@@ -171,10 +258,10 @@ backfill_secret MAILPIT_UI_AUTH "${MAILPIT_UI_AUTH}"
 # Derive the connection URLs and Metabase password from the current, possibly
 # just-backfilled, database and Redis passwords. Idempotent.
 CURRENT_POSTGRESQL_PASSWORD="$(sed -n "s/^POSTGRESQL_PASSWORD=//p" .env | head -1)"
-"${SED_INPLACE[@]}" "s|\(DATABASE_URL=postgres://[^:]*:\)[^@]*@|\1${CURRENT_POSTGRESQL_PASSWORD}@|" .env
-"${SED_INPLACE[@]}" "s/METABASE_DATABASE_PASSWORD=.*/METABASE_DATABASE_PASSWORD=${CURRENT_POSTGRESQL_PASSWORD}/" .env
+set_url_password DATABASE_URL "${CURRENT_POSTGRESQL_PASSWORD}" .env
+set_environment_value METABASE_DATABASE_PASSWORD "${CURRENT_POSTGRESQL_PASSWORD}" .env
 CURRENT_REDIS_PASSWORD="$(sed -n "s/^REDIS_PASSWORD=//p" .env | head -1)"
-"${SED_INPLACE[@]}" "s|REDIS_URL=redis://:.*@redis|REDIS_URL=redis://:${CURRENT_REDIS_PASSWORD}@redis|" .env
+set_url_password REDIS_URL "${CURRENT_REDIS_PASSWORD}" .env
 
 # Generate self-signed TLS certificates for RabbitMQ and Traefik if they are
 # missing. assemble.py creates them during synchronize.sh, but a fresh clone
@@ -191,7 +278,7 @@ fi
 # Replaces the placeholder SSL_CERTIFICATE_PATH with the absolute path from assemble.py.
 if [ -f containers/.certificates ]; then
     cert_path=$(cut -d= -f2- < containers/.certificates)
-    "${SED_INPLACE[@]}" "s|SSL_CERTIFICATE_PATH=.*|SSL_CERTIFICATE_PATH=${cert_path}|" .env
+    set_environment_value SSL_CERTIFICATE_PATH "${cert_path}" .env
     rm containers/.certificates
 fi
 
@@ -340,12 +427,37 @@ elif command -v docker >/dev/null 2>&1; then
         done
 
         # Wait for containers to report healthy status.
+        #
+        # Read through `--format` rather than by column position. The old
+        # `awk '$5'` over the table landed on the CREATED column ("13 seconds
+        # ago"), so `$5` was a number, never matched "healthy" or "running",
+        # and the loop always ran its full 30 iterations. That made this a
+        # flat 60-second sleep that gated on nothing and reported nothing.
+        #
+        # A service counts as ready when it is running and either passes its
+        # healthcheck or does not define one, which is what an empty Health
+        # field means.
         info "Waiting for services to become healthy..."
+        services_ready=false
         for _ in $(seq 1 30); do
-            unhealthy=$(docker compose ps 2>/dev/null | awk 'NR>1 && $5!="healthy" && $5!="running"' | wc -l || echo 0)
-            if [ "$unhealthy" -eq 0 ]; then break; fi
+            pending=$(docker compose ps --format '{{.State}}|{{.Health}}' 2>/dev/null \
+                | awk -F'|' 'NF && !($1 == "running" && ($2 == "" || $2 == "healthy"))' \
+                | wc -l | tr -d ' ')
+            if [ "${pending:-1}" -eq 0 ]; then
+                services_ready=true
+                break
+            fi
             sleep 2
         done
+
+        if [ "$services_ready" != true ]; then
+            warn "Some services are not healthy:"
+            docker compose ps --format '{{.Service}}|{{.State}}|{{.Health}}' 2>/dev/null \
+                | awk -F'|' 'NF && !($2 == "running" && ($3 == "" || $3 == "healthy"))' \
+                | while IFS='|' read -r name state health; do
+                    warn "  ${name}: ${state} ${health}"
+                done
+        fi
     else
         warn "Skipping migrations and seeding..."
     fi

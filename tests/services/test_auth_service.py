@@ -1,5 +1,6 @@
 """Unit tests for `AuthService`."""
 
+from typing import Any
 from typing import cast
 from unittest.mock import ANY
 from unittest.mock import AsyncMock
@@ -8,8 +9,10 @@ from unittest.mock import patch
 from uuid import uuid7
 
 import pytest
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.security import TokenRateLimitError
 from app.core.security import decode_token
 from app.core.security import generate_password_hash
 from app.core.tenant import system_context
@@ -104,6 +107,95 @@ class TestAuthService:
             )
 
     @pytest.mark.asyncio
+    async def _authenticate_like_a_route_would(
+        self,
+        session: AsyncSession,
+        **kwargs: Any,
+    ) -> None:
+        """Call `authenticate()` and roll back on failure, exactly like the
+        real `get_async_session()` dependency does around a raised
+        `HTTPException` (see `app/database.py`).
+
+        `override_get_async_session_fixture` swaps in a bare passthrough
+        for `get_async_session` in HTTP-level tests, which skips that
+        commit/rollback wrapper entirely, so exercising it here is the
+        only way to catch a fix that only holds up under the real
+        dependency's behavior.
+        """
+        auth_service = _auth_service(session)
+        try:
+            await auth_service.authenticate(**kwargs)
+        except Exception:
+            await session.rollback()
+            raise
+
+    async def test_wrong_password_writes_login_failed_audit_entry(
+        self, session: AsyncSession
+    ) -> None:
+        """A failed login for a real account must leave an audit trail that
+        survives the rollback the route triggers by re-raising.
+
+        Regression: `AuditAction.LOGIN_FAILED` was written inside a
+        `begin_nested()` SAVEPOINT (`log_user_action_safe`) but nothing
+        committed it before `authenticate()` raised, so the route's
+        exception handler rolled the SAVEPOINT back along with everything
+        else, silently discarding the audit trail this exists for.
+        """
+        from app.models.audit_log import AuditAction
+        from app.models.audit_log import AuditLog
+
+        auth_service = _auth_service(session)
+        user = await auth_service.register(
+            RegisterRequest(email="wrong-pw-audit@example.com", password="password123")
+        )
+
+        with pytest.raises(InvalidCredentialsError):
+            await self._authenticate_like_a_route_would(
+                session,
+                email="wrong-pw-audit@example.com",
+                password="wrongpassword",
+            )
+
+        result = await session.execute(
+            select(AuditLog).where(
+                AuditLog.action == AuditAction.LOGIN_FAILED,
+                AuditLog.actor_id == str(user.id),
+            )
+        )
+        assert result.scalar_one_or_none() is not None
+
+    @pytest.mark.asyncio
+    async def test_unknown_email_writes_login_failed_audit_entry(
+        self, session: AsyncSession
+    ) -> None:
+        """A failed login for an email with no account still leaves a trail,
+        under a placeholder actor since no `user_id` exists to attribute it
+        to, and it must survive the route's rollback the same way."""
+        from app.models.audit_log import AuditAction
+        from app.models.audit_log import AuditLog
+
+        with pytest.raises(InvalidCredentialsError):
+            await self._authenticate_like_a_route_would(
+                session,
+                email="no-such-account@example.com",
+                password="password123",
+            )
+
+        result = await session.execute(
+            select(AuditLog).where(
+                AuditLog.action == AuditAction.LOGIN_FAILED,
+                AuditLog.actor_id == "unknown",
+            )
+        )
+        entry = result.scalar_one_or_none()
+        assert entry is not None
+        # `actor_email` is an `EncryptedString` column, comparing it to a
+        # plaintext value in a SQL `WHERE` clause can never match, since the
+        # stored value is ciphertext, decryption only happens on Python-level
+        # attribute access. Compared here instead of in the query above.
+        assert entry.actor_email == "no-such-account@example.com"
+
+    @pytest.mark.asyncio
     async def test_authenticate_inactive_user_raises_inactive(
         self, session: AsyncSession
     ) -> None:
@@ -123,6 +215,41 @@ class TestAuthService:
                 email="inactive@example.com",
                 password="password123",
             )
+
+    @pytest.mark.asyncio
+    async def test_inactive_user_login_writes_login_failed_audit_entry(
+        self, session: AsyncSession
+    ) -> None:
+        """A login attempt against a disabled account must also leave a
+        trail, and it must survive the route's rollback.
+
+        Regression: this branch previously raised with no audit call at
+        all, a lockout attempt on a disabled account left no trace.
+        """
+        from app.models.audit_log import AuditAction
+        from app.models.audit_log import AuditLog
+
+        auth_service = _auth_service(session)
+        user = await auth_service.register(
+            RegisterRequest(email="inactive-audit@example.com", password="password123")
+        )
+        with system_context():
+            await auth_service.user_repository.update(user.id, {"is_active": False})
+
+        with pytest.raises(UserInactiveError):
+            await self._authenticate_like_a_route_would(
+                session,
+                email="inactive-audit@example.com",
+                password="password123",
+            )
+
+        result = await session.execute(
+            select(AuditLog).where(
+                AuditLog.action == AuditAction.LOGIN_FAILED,
+                AuditLog.actor_id == str(user.id),
+            )
+        )
+        assert result.scalar_one_or_none() is not None
 
     @pytest.mark.asyncio
     async def test_register_existing_email_raises_error(
@@ -206,7 +333,12 @@ class TestAuthService:
     async def test_refresh_tokens_blacklists_old_refresh_token(
         self, session: AsyncSession
     ) -> None:
-        """Refreshing tokens should blacklist used refresh token jti."""
+        """Refreshing tokens should claim the used refresh token jti.
+
+        The claim replaced a plain blacklist write. It has to happen
+        exactly once, and it has to carry the token's own identifier and
+        expiry so the entry expires with the token.
+        """
         auth_service = _auth_service(session)
         user = await auth_service.register(
             RegisterRequest(
@@ -217,15 +349,15 @@ class TestAuthService:
         tokens = auth_service.create_tokens(user)
 
         with patch(
-            "app.services.auth_service.blacklist_token",
-            AsyncMock(),
-        ) as mock_blacklist_token:
+            "app.services.auth_service.claim_token_for_rotation",
+            AsyncMock(return_value=True),
+        ) as mock_claim:
             refreshed_tokens = await auth_service.refresh_tokens(tokens.refresh_token)
 
         assert refreshed_tokens.access_token
         assert refreshed_tokens.refresh_token
         assert refreshed_tokens.refresh_token != tokens.refresh_token
-        mock_blacklist_token.assert_awaited_once_with(ANY, ANY)
+        mock_claim.assert_awaited_once_with(ANY, ANY)
 
     @pytest.mark.asyncio
     async def test_refresh_tokens_rejects_blacklisted_refresh_token(
@@ -929,3 +1061,170 @@ class TestEmailTokens:
             await auth_service.send_password_reset_email("unknown@example.com")
 
         mock_send.assert_not_called()
+
+
+class TestTokenCooldownIsNotAnEnumerationOracle:
+    """A throttled send must look identical to an unknown address.
+
+    The per-user cooldown on `create_password_reset_token` and
+    `create_magic_link_token` only fires for addresses that exist, so
+    letting `TokenRateLimitError` surface defeated the "always 204"
+    promise both endpoints document: submit an address twice, a 429 on
+    the second attempt meant the account was real and two 204s meant it
+    was not.
+    """
+
+    @pytest.mark.asyncio
+    async def test_password_reset_swallows_the_cooldown(
+        self, session: AsyncSession
+    ) -> None:
+        """A throttled reset must return, not raise.
+
+        Args:
+            session: Async database session fixture.
+        """
+        auth_service = _auth_service(session)
+        user = await auth_service.register(
+            RegisterRequest(email="throttled-reset@example.com", password="password123")
+        )
+
+        with patch.object(
+            auth_service,
+            "_send_token_email",
+            AsyncMock(side_effect=TokenRateLimitError("cooldown")),
+        ):
+            await auth_service.send_password_reset_email(user.email)
+
+    @pytest.mark.asyncio
+    async def test_magic_link_swallows_the_cooldown(
+        self, session: AsyncSession
+    ) -> None:
+        """A throttled magic link must return, not raise.
+
+        Args:
+            session: Async database session fixture.
+        """
+        auth_service = _auth_service(session)
+        user = await auth_service.register(
+            RegisterRequest(email="throttled-magic@example.com", password="password123")
+        )
+
+        with patch.object(
+            auth_service,
+            "_send_token_email",
+            AsyncMock(side_effect=TokenRateLimitError("cooldown")),
+        ):
+            await auth_service.send_magic_link(user.email)
+
+
+class TestRefreshRotationIsAtomic:
+    """Only one caller may exchange a given refresh token.
+
+    Rotation checked the blacklist and wrote to it as two separate steps
+    with the whole token mint in between. Two requests carrying the same
+    refresh token both read "not blacklisted" and both walked away with a
+    fresh pair, so a stolen token replayed alongside the real one worked
+    and the blacklist caught nothing.
+    """
+
+    @pytest.mark.asyncio
+    async def test_concurrent_refreshes_yield_one_winner(
+        self, session: AsyncSession
+    ) -> None:
+        """Two simultaneous refreshes of one token: one succeeds, one fails.
+
+        Args:
+            session: Async database session fixture.
+        """
+        import asyncio
+
+        auth_service = _auth_service(session)
+        user = await auth_service.register(
+            RegisterRequest(
+                email="refresh-race@example.com",
+                password="password123",
+            )
+        )
+        tokens = auth_service.create_tokens(user)
+
+        claimed: set[str] = set()
+
+        async def _claim(token_identifier: str, expires_at: object) -> bool:
+            # Stand in for Redis SET NX, including a suspension point at
+            # exactly the spot the old two-step version was vulnerable.
+            already = token_identifier in claimed
+            await asyncio.sleep(0)
+            if already:
+                return False
+            claimed.add(token_identifier)
+            return True
+
+        with patch(
+            "app.services.auth_service.claim_token_for_rotation",
+            AsyncMock(side_effect=_claim),
+        ):
+            results = await asyncio.gather(
+                auth_service.refresh_tokens(tokens.refresh_token),
+                auth_service.refresh_tokens(tokens.refresh_token),
+                return_exceptions=True,
+            )
+
+        succeeded = [r for r in results if not isinstance(r, BaseException)]
+        rejected = [r for r in results if isinstance(r, AuthenticationError)]
+
+        assert len(succeeded) == 1, results
+        assert len(rejected) == 1, results
+
+    @pytest.mark.asyncio
+    async def test_a_lost_claim_is_rejected(self, session: AsyncSession) -> None:
+        """Losing the claim must not still return a token pair.
+
+        Args:
+            session: Async database session fixture.
+        """
+        auth_service = _auth_service(session)
+        user = await auth_service.register(
+            RegisterRequest(
+                email="refresh-lost-claim@example.com",
+                password="password123",
+            )
+        )
+        tokens = auth_service.create_tokens(user)
+
+        with patch(
+            "app.services.auth_service.claim_token_for_rotation",
+            AsyncMock(return_value=False),
+        ):
+            with pytest.raises(AuthenticationError):
+                await auth_service.refresh_tokens(tokens.refresh_token)
+
+    @pytest.mark.asyncio
+    async def test_a_rejected_refresh_does_not_burn_the_token(
+        self, session: AsyncSession
+    ) -> None:
+        """Validation runs before the claim, so a failure leaves it usable.
+
+        Args:
+            session: Async database session fixture.
+        """
+        auth_service = _auth_service(session)
+        user = await auth_service.register(
+            RegisterRequest(
+                email="refresh-not-burned@example.com",
+                password="password123",
+            )
+        )
+        tokens = auth_service.create_tokens(user)
+
+        with system_context():
+            await auth_service.user_repository.update(user.id, {"is_active": False})
+
+        with patch(
+            "app.services.auth_service.claim_token_for_rotation",
+            AsyncMock(return_value=True),
+        ) as mock_claim:
+            # `refresh_tokens` converts `UserInactiveError` on its way out.
+            with pytest.raises(AuthenticationError):
+                await auth_service.refresh_tokens(tokens.refresh_token)
+
+        mock_claim.assert_not_awaited()
