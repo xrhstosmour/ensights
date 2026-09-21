@@ -54,7 +54,16 @@ def custom_generate_unique_id(route: APIRoute) -> str:
 # Keys whose values are redacted from Sentry events, in addition to the
 # `send_default_pii=False` SDK setting, as defense in depth against PII/secret
 # leakage via exception stack frame locals, request data, and extra context.
-SENTRY_SENSITIVE_KEYS = ("password", "token", "secret", "authorization")
+SENTRY_SENSITIVE_KEYS = (
+    "password",
+    "token",
+    "secret",
+    "authorization",
+    "email",
+    "phone",
+    "totp",
+    "recovery_code",
+)
 
 
 def _scrub_sensitive_data(data: Any) -> Any:  # noqa: ANN401
@@ -102,9 +111,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     Handles startup and shutdown events for the application.
     Initializes and cleans up database and cache connections.
     """
-    # Startup.
-    logger.info("application_starting", environment=settings.ENVIRONMENT)
+    # Startup. `setup_logging()` comes first: anything logged before it runs
+    # goes through structlog's default configuration, so in production this
+    # line came out as coloured console text in the middle of the JSON log
+    # stream, with no correlation ID and no service context.
     setup_logging()
+    logger.info("application_starting", environment=settings.ENVIRONMENT)
 
     try:
         from app.core.telemetry import setup_tracing
@@ -204,12 +216,21 @@ def create_app() -> FastAPI:
         return response
 
     # Tenant context middleware.
+    #
+    # This looks like a no-op and is not. `request.state.tenant_id` is set by
+    # `get_current_user`, a dependency, which runs downstream of every
+    # middleware, so the value read here is always None. What matters is the
+    # `with` block: it scopes the tenant ContextVar to this request and
+    # restores it afterwards. Without it, the tenant set by one request's
+    # dependency stays set for the next request handled on the same task, so
+    # an unauthenticated request inherits the previous caller's tenant.
+    # `tests/core/test_tenant.py` covers exactly that.
     @app.middleware("http")
     async def tenant_middleware(
         request: Request,
         call_next: Callable[[Request], Awaitable[Response]],
     ) -> Response:
-        """Extract and set tenant context from request."""
+        """Scope the tenant context to this request."""
         tenant_id = getattr(request.state, "tenant_id", None)
 
         with tenant_context(tenant_id):

@@ -86,6 +86,45 @@ class TestUsersList:
         assert "link" in response.headers
         assert response.headers["link"].startswith("<")
 
+    @pytest.mark.usefixtures("override_get_async_session")
+    async def test_unknown_role_is_rejected(
+        self, client: AsyncClient, session: AsyncSession
+    ) -> None:
+        """An unknown `?role=` is a bad request, not a server error."""
+        auth_service = _auth_service(session)
+        superuser = await _create_superuser(auth_service)
+        token = create_access_token(subject=superuser.id)
+
+        response = await client.get(
+            "/api/v1/users",
+            params={"role": "admin"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert response.status_code == 422
+
+    @pytest.mark.usefixtures("override_get_async_session")
+    async def test_known_role_still_filters(
+        self, client: AsyncClient, session: AsyncSession
+    ) -> None:
+        """A valid `?role=` still narrows the list."""
+        auth_service = _auth_service(session)
+        await auth_service.register(
+            RegisterRequest(email="user@ensights.com", password="password123")
+        )
+        superuser = await _create_superuser(auth_service)
+        token = create_access_token(subject=superuser.id)
+
+        response = await client.get(
+            "/api/v1/users",
+            params={"role": UserRole.SUPERUSER.value},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert response.status_code == 200
+        roles = {user["role"] for user in response.json()["data"]}
+        assert roles == {UserRole.SUPERUSER.value}
+
 
 class TestUsersRead:
     """Tests for GET /api/v1/users/{user_id}."""
@@ -158,6 +197,47 @@ class TestUsersCreate:
 
         assert response.status_code == 400
         assert "already in use" in response.json()["detail"]
+
+    @pytest.mark.usefixtures("override_get_async_session")
+    async def test_create_user_with_foreign_tenant_id_returns_400(
+        self, client: AsyncClient, session: AsyncSession
+    ) -> None:
+        """A tenant-scoped superuser cannot plant a user in another tenant.
+
+        Regression: `UserService.create()` used to take `data.tenant_id`
+        verbatim, letting any superuser create a user (including another
+        superuser) inside an arbitrary tenant.
+        """
+        from app.models.tenant import Tenant
+
+        auth_service = _auth_service(session)
+        own_tenant = Tenant(name="Own Co", slug="own-co-create-user")
+        foreign_tenant = Tenant(name="Foreign Co", slug="foreign-co-create-user")
+        session.add(own_tenant)
+        session.add(foreign_tenant)
+        await session.commit()
+
+        superuser = await auth_service.user_repository.create_user(
+            email=f"scoped-superuser-{uuid7()}@ensights.com",
+            password_hash=generate_password_hash("password123"),
+            tenant_id=own_tenant.id,
+            role=UserRole.SUPERUSER,
+        )
+        token = create_access_token(subject=superuser.id)
+
+        response = await client.post(
+            "/api/v1/users",
+            headers={"Authorization": f"Bearer {token}"},
+            json={
+                "email": f"planted-{uuid7()}@ensights.com",
+                "full_name": "Planted User",
+                "password": "password123",
+                "tenant_id": str(foreign_tenant.id),
+            },
+        )
+
+        assert response.status_code == 400
+        assert "another tenant" in response.json()["detail"].lower()
 
 
 class TestUsersUpdate:

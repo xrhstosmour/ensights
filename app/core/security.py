@@ -211,6 +211,46 @@ async def blacklist_token(token_identifier: str, expires_at: datetime) -> None:
         return
 
 
+async def claim_token_for_rotation(token_identifier: str, expires_at: datetime) -> bool:
+    """Blacklist a token and report whether this caller was the one to do it.
+
+    `SET NX` is atomic, so exactly one caller can win for a given `jti`.
+    Checking the blacklist and then writing to it as two steps leaves a
+    window where two concurrent refreshes both read "not blacklisted" and
+    both mint a fresh token pair, which is the reuse the blacklist exists
+    to catch.
+
+    Fails open on Redis errors, matching `is_token_blacklisted`: a
+    transient outage must not lock every user out, and `token_version`
+    remains the hard revocation guarantee.
+
+    Args:
+        token_identifier: JWT ``jti`` claim value.
+        expires_at: UTC expiration time from token ``exp``.
+
+    Returns:
+        True if this call claimed the token, False if it was already used.
+    """
+    from app.core.cache import get_redis
+
+    now = datetime.now(UTC)
+    remaining_seconds = int((expires_at - now).total_seconds())
+    if remaining_seconds <= 0:
+        return False
+
+    try:
+        redis = await get_redis()
+        key = f"{_JWT_BLACKLIST_PREFIX}:{token_identifier}"
+        return bool(await redis.set(key, "1", ex=remaining_seconds, nx=True))
+    except (RedisConnectionError, RedisTimeoutError) as error:
+        logger.warning(
+            "token_rotation_claim_failed",
+            token_identifier=token_identifier,
+            error=str(error),
+        )
+        return True
+
+
 async def is_token_blacklisted(token_identifier: str) -> bool:
     """Check whether a JWT token identifier is blacklisted.
 
@@ -467,21 +507,27 @@ async def create_google_oauth_state(redirect_uri: str) -> str:
     Binding the URI to the state token prevents open-redirect attacks
     where an attacker substitutes a different callback URI on the return trip.
 
+    No cooldown of its own. `_check_token_rate_limit` keys on a per-user
+    identifier, and this flow has no user yet, so it was called with
+    `redirect_uri` instead. Every caller of a given deployment sends the
+    same one, that is the point of a registered callback URL, so the
+    cooldown key was shared by everybody: one request parked
+    `rate_limit:google_oauth_state:<the callback URL>` for ten seconds and
+    every other Google sign-in in the deployment got a 429 until it
+    expired, repeatable indefinitely by an anonymous caller. `/auth/google`
+    carries `check_auth_rate_limit` instead, which keys on client IP, the
+    same limiter the other unauthenticated auth endpoints use.
+
     Args:
         redirect_uri: The redirect URI that will be sent to Google.
             Stored in Redis so it can be validated on callback.
 
     Returns:
         Opaque URL-safe state string (32 bytes, base64url encoded).
-
-    Raises:
-        TokenRateLimitError: If a token was recently created for this redirect URI.
     """
     from app.core.cache import get_redis
 
     redis = await get_redis()
-    await _check_token_rate_limit(redis, "google_oauth_state", redirect_uri, 10)
-
     state = secrets.token_urlsafe(32)
     key = f"{_GOOGLE_OAUTH_STATE_PREFIX}:{state}"
     await redis.setex(key, settings.GOOGLE_OAUTH_STATE_TTL_SECONDS, redirect_uri)
