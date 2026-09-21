@@ -1,0 +1,21 @@
+meta {
+  name: Top Products
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/v1/analytics/top-products
+  body: none
+  auth: inherit
+}
+
+params:query {
+  ~limit: 10
+  ~start:
+  ~end:
+}
+
+docs {
+  `/api/v1/analytics`: sales by product, region, time, price band.
+}
