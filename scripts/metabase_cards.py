@@ -293,7 +293,7 @@ def ensure_cards(client: Metabase, database_id: int) -> dict[str, int]:
 
 
 def ensure_dashboards(client: Metabase, cards: dict[str, int]) -> None:
-    """Create the three dashboards and lay their cards out two per row.
+    """Create the three dashboards and stack their cards one per row.
 
     Args:
         client: An authenticated client.
@@ -326,9 +326,9 @@ def ensure_dashboards(client: Metabase, cards: dict[str, int]) -> None:
                     {
                         "id": -(index + 1),
                         "card_id": cards[key],
-                        "row": (index // 2) * 8,
-                        "col": (index % 2) * 12,
-                        "size_x": 12,
+                        "row": index * 8,
+                        "col": 0,
+                        "size_x": 24,
                         "size_y": 8,
                         "parameter_mappings": [],
                         "visualization_settings": {},
