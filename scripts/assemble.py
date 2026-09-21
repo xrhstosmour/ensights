@@ -20,6 +20,51 @@ REPO_URL = "https://github.com/xrhstosmour/containers.git"
 REPO_COMMIT = "8aa9d2d33938f80c11afc02005f2938233fd5dc3"
 
 
+def cache_directory() -> str:
+    """Return the per-user directory the containers repo is cached in.
+
+    Not `/tmp/containers`. That path is fixed and its parent is world
+    writable, so on a shared machine any other local user can pre-create it
+    and hand this script the compose files a project then runs, with the
+    project's secrets in the environment. Nothing verified what was found
+    there. `XDG_CACHE_HOME`, or `~/.cache`, is per-user and is where a
+    cache of this kind belongs.
+
+    Returns:
+        Absolute path to the cache directory. Not created here.
+    """
+    base = os.environ.get("XDG_CACHE_HOME") or os.path.join(
+        os.path.expanduser("~"), ".cache"
+    )
+    return os.path.join(base, "yap", "containers")
+
+
+def cache_is_current(path: str) -> bool:
+    """Report whether a cached clone is checked out at `REPO_COMMIT`.
+
+    The cache used to be reused on existence alone, so bumping
+    `REPO_COMMIT` silently kept vendoring the previous one on any machine
+    that had run this before.
+
+    Args:
+        path: Directory to check.
+
+    Returns:
+        True when `path` is a git checkout sitting on `REPO_COMMIT`.
+    """
+    if not os.path.isdir(os.path.join(path, ".git")):
+        return False
+
+    result = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=path,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return result.returncode == 0 and result.stdout.strip() == REPO_COMMIT
+
+
 # Matched against the vendored compose files to namespace them per project.
 # Anchored and quote-aware so they only ever touch the exact keys intended.
 CONTAINER_NAME_PATTERN = re.compile(r'^(\s*)container_name:\s*"([^"]+)"\s*$')
@@ -241,42 +286,114 @@ def namespace_compose_file(compose_path: str, project_slug: str) -> None:
     Path(compose_path).write_text("\n".join(output) + "\n")
 
 
+TRAEFIK_PASSWORD_KEY = "TRAEFIK_DASHBOARD_PASSWORD"
+
+
+def read_environment_value(key: str, path: str) -> str:
+    """Read a single `KEY=value` out of an env file.
+
+    Args:
+        key: The variable name to look for.
+        path: The env file to read.
+
+    Returns:
+        The value, or an empty string when the file or key is absent.
+    """
+    if not os.path.isfile(path):
+        return ""
+
+    for line in Path(path).read_text().splitlines():
+        if line.startswith(f"{key}="):
+            return line.split("=", 1)[1].strip().strip('"')
+    return ""
+
+
+def traefik_dashboard_password(project_slug: str) -> str:
+    """Return the dashboard password, reusing one that is already set.
+
+    Reused rather than regenerated so a `copier update`, which re-vendors
+    the containers directory and so resets `.htpasswd` to its placeholder,
+    does not silently rotate the password out from under whoever is using
+    it.
+
+    Args:
+        project_slug: Used as the prefix of a freshly generated password.
+
+    Returns:
+        The existing password if there is one, otherwise a new one.
+    """
+    for path in (".env", ".env.example"):
+        existing = read_environment_value(TRAEFIK_PASSWORD_KEY, path)
+        if existing and not existing.startswith("your-"):
+            return existing
+
+    return project_slug + "-" + os.urandom(8).hex()
+
+
+def store_traefik_dashboard_password(password: str) -> None:
+    """Persist the plaintext password so somebody can actually log in.
+
+    Written to `.env` when it exists, and to `.env.example` otherwise,
+    since `assemble.py` runs before `setup.sh` creates `.env` on a first
+    generation. `setup.sh` copies `.env.example` across and then scrubs it,
+    so the value lands in `.env` either way and never stays in the
+    committed file.
+
+    Args:
+        password: The plaintext to record.
+    """
+    for path in (".env", ".env.example"):
+        if not os.path.isfile(path):
+            continue
+
+        lines = Path(path).read_text().splitlines()
+        for index, line in enumerate(lines):
+            if line.startswith(f"{TRAEFIK_PASSWORD_KEY}="):
+                lines[index] = f"{TRAEFIK_PASSWORD_KEY}={password}"
+                break
+        else:
+            lines.append(f"{TRAEFIK_PASSWORD_KEY}={password}")
+        Path(path).write_text("\n".join(lines) + "\n")
+
+
 def main() -> None:
     containers_directory = "containers"
     services = read_services(containers_directory)
     project_slug = read_project_slug()
 
-    # Find the containers repo: check adjacent path first, then cached
-    # clone at /tmp/containers, then clone fresh if neither exists.
+    # Find the containers repo: check adjacent path first, then the per-user
+    # cache, then clone fresh if neither is usable.
+    cache = cache_directory()
     containers_root = os.path.abspath("../containers")
     if os.path.isdir(containers_root):
         print(f"Using containers repo at {containers_root}")
-    elif os.path.isdir("/tmp/containers"):
-        print("Using cached containers repo at /tmp/containers")
-        containers_root = "/tmp/containers"
+    elif cache_is_current(cache):
+        print(f"Using cached containers repo at {cache}")
+        containers_root = cache
     else:
-        # Remove any stale directory before cloning so this step is
-        # idempotent even when a previous run left /tmp/containers behind.
-        shutil.rmtree("/tmp/containers", ignore_errors=True)
+        # Remove any stale or unverifiable directory before cloning, so this
+        # step is idempotent and never vendors from something it did not
+        # place there itself.
+        shutil.rmtree(cache, ignore_errors=True)
         print(f"Cloning {REPO_URL} @ {REPO_COMMIT} ...")
-        os.makedirs("/tmp/containers")
-        subprocess.run(["git", "init"], check=True, cwd="/tmp/containers")
+        os.makedirs(cache)
+        subprocess.run(["git", "init"], check=True, cwd=cache)
         subprocess.run(
             ["git", "remote", "add", "origin", REPO_URL],
             check=True,
-            cwd="/tmp/containers",
+            cwd=cache,
         )
         subprocess.run(
             ["git", "fetch", "--depth", "1", "origin", REPO_COMMIT],
             check=True,
-            cwd="/tmp/containers",
+            cwd=cache,
         )
         subprocess.run(
             ["git", "checkout", "FETCH_HEAD"],
             check=True,
-            cwd="/tmp/containers",
+            cwd=cache,
         )
-        containers_root = "/tmp/containers"
+        containers_root = cache
 
     # Copy service directories.
     for name in services:
@@ -311,14 +428,18 @@ def main() -> None:
                 print(f"  Renaming {src_path} -> {dst_path}")
                 os.rename(src_path, dst_path)
 
-    # Generate htpasswd for Traefik dashboard basic auth.
+    # Generate htpasswd for Traefik dashboard basic auth. The plaintext is
+    # kept in .env alongside every other generated credential: it used to be
+    # created here, hashed, and dropped when the function returned, so the
+    # dashboard was protected by a password that had never existed anywhere
+    # a person could read it.
     for root, _, files in os.walk(containers_directory):
         for f in files:
             if f == ".htpasswd":
                 htpasswd_path = os.path.join(root, f)
                 with open(htpasswd_path) as hf:
                     if "encoded_password" in hf.read():
-                        password = project_slug + "-" + os.urandom(4).hex()
+                        password = traefik_dashboard_password(project_slug)
                         result = subprocess.run(
                             ["openssl", "passwd", "-6", password],
                             capture_output=True,
@@ -327,7 +448,12 @@ def main() -> None:
                         if result.returncode == 0:
                             with open(htpasswd_path, "w") as hf:
                                 hf.write(f"admin:{result.stdout.strip()}\n")
-                            print("  Generated htpasswd")
+                            store_traefik_dashboard_password(password)
+                            print(
+                                "  Generated htpasswd, dashboard login is "
+                                "'admin' with TRAEFIK_DASHBOARD_PASSWORD "
+                                "from .env"
+                            )
                         else:
                             print(
                                 "  Warning: openssl not available, "
@@ -366,9 +492,10 @@ def main() -> None:
         f.write(f"SSL_CERTIFICATE_PATH={ca_cert}\n")
     print(f"  Wrote {certs_env}")
 
-    # Keep /tmp/containers around so subsequent runs of assemble.py within the
-    # same copier update can reuse it instead of cloning again.
-    # The temp directory is cleaned up by synchronize.sh before the next update.
+    # The cache is kept so subsequent runs of assemble.py within the same
+    # copier update reuse it instead of cloning again. It is validated
+    # against REPO_COMMIT on the way in, so a stale one is replaced rather
+    # than trusted.
 
     print("Done.")
 

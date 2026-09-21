@@ -18,6 +18,7 @@ from sqlalchemy import update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import SYSTEM_TENANT_ID
+from app.core.encryption import encrypted_column_names
 from app.core.logging import get_logger
 from app.core.security import generate_password_hash
 from app.core.security import verify_password
@@ -34,6 +35,19 @@ from app.schemas.user import UserUpdate
 from app.schemas.user import UserUpdateMe
 
 logger = get_logger("service.user")
+
+# GDPR export sizing. `_EXPORT_PAGE_SIZE` only sets how many API keys are
+# fetched per round trip, never how many are returned: `export_my_data`
+# pages until it has them all. `_ACTIVITY_EXPORT_LIMIT` is a real cap, and
+# the export says so when it bites.
+_EXPORT_PAGE_SIZE = 100
+_ACTIVITY_EXPORT_LIMIT = 500
+
+# Fields whose new value must not be written raw into `AuditLog.changes`,
+# an unencrypted JSON column. Derived from `User`'s `EncryptedString`
+# columns rather than hand-maintained, so it can't drift from the model's
+# actual PII columns the way a literal set could.
+_PII_UPDATE_FIELDS = encrypted_column_names(User)
 
 
 class UserServiceError(Exception):
@@ -108,10 +122,15 @@ class UserService:
             filters["role"] = role
 
         if search:
+            # `filters` goes through here too. It used to be built above and
+            # then dropped on this branch, so `?search=x&is_active=false`
+            # quietly ignored `is_active` and returned active users as well.
+            # An admin filtering a list has no way to see that happen.
             return await self.user_repository.search(
                 search,
                 skip=skip,
                 limit=limit,
+                filters=filters or None,
             )
 
         users, total = await self.user_repository.list(
@@ -125,19 +144,43 @@ class UserService:
         self,
         data: UserCreate,
         created_by: UUID | None = None,
+        creator_tenant_id: UUID | None = None,
     ) -> User:
         """Create a new user.
 
         Args:
             data: User creation data
             created_by: UUID of user creating this account
+            creator_tenant_id: Tenant of the user making this request. A
+                caller outside the system tenant may only create users
+                inside their own tenant, a client-supplied `data.tenant_id`
+                pointing elsewhere is rejected rather than honored, which
+                would otherwise let a tenant-scoped superuser plant a user
+                (including another superuser) in a foreign tenant. `None`
+                is treated as "not a platform admin" (fail closed), not
+                coalesced to `SYSTEM_TENANT_ID`, since `User.tenant_id` is
+                nullable at the type level and silently promoting a caller
+                with no known tenant to platform-admin would be a
+                privilege escalation in its own right.
 
         Returns:
             Created User
+
+        Raises:
+            UserServiceError: If the email is already in use, or a
+                tenant-scoped caller requests a foreign `tenant_id`.
         """
         # Check email exists.
         if await self.user_repository.email_exists(data.email):
             raise UserServiceError("Email already in use")
+
+        caller_is_platform_admin = creator_tenant_id == SYSTEM_TENANT_ID
+        if (
+            data.tenant_id is not None
+            and not caller_is_platform_admin
+            and data.tenant_id != creator_tenant_id
+        ):
+            raise UserServiceError("Cannot create a user in another tenant")
 
         # Create user.
         role = UserRole(data.role) if data.role else UserRole.USER
@@ -146,7 +189,7 @@ class UserService:
             email=data.email,
             password_hash=password_hash,
             full_name=data.full_name,
-            tenant_id=data.tenant_id or SYSTEM_TENANT_ID,
+            tenant_id=data.tenant_id or creator_tenant_id or SYSTEM_TENANT_ID,
             role=role,
         )
 
@@ -209,7 +252,13 @@ class UserService:
                 return None
             user = updated_user
 
-            # Log update.
+            # Log update. `changes` lands in `AuditLog.changes`, a plain
+            # unencrypted JSON column, so PII values (e.g. the new email)
+            # are redacted before logging rather than stored raw.
+            audit_changes = {
+                key: "[REDACTED]" if key in _PII_UPDATE_FIELDS else value
+                for key, value in update_data.items()
+            }
             await self.audit_repository.log_user_action_safe(
                 action=AuditAction.USER_UPDATE,
                 user_id=updated_by,
@@ -217,7 +266,7 @@ class UserService:
                 email=user.email,
                 resource_type="user",
                 resource_id=str(user_id),
-                changes=update_data,
+                changes=audit_changes,
             )
 
         return user
@@ -462,9 +511,14 @@ class UserService:
 
         tenant_id = user.tenant_id or SYSTEM_TENANT_ID
 
-        # Fetch audit activity for this user (up to 500 most recent entries).
-        activity_logs, _ = await self.audit_repository.get_by_actor(
-            actor_id=str(user.id), skip=0, limit=500
+        # Audit activity, capped. Unlike the API keys below this cap is
+        # deliberate, an actor's audit trail is unbounded and this response
+        # is built in memory. It is reported in the payload rather than
+        # applied silently, so the recipient can tell a complete export
+        # from a truncated one, which an Article 20 export has to be
+        # honest about.
+        activity_logs, activity_total = await self.audit_repository.get_by_actor(
+            actor_id=str(user.id), skip=0, limit=_ACTIVITY_EXPORT_LIMIT
         )
 
         profile: dict[str, Any] = {
@@ -479,10 +533,23 @@ class UserService:
 
         # Explicitly load API keys since the relationship may not be
         # loaded through the current_user dependency.
+        #
+        # Paged to completeness. `list()` defaults to `limit=20`, and
+        # nothing here overrode it, so a user with more than twenty keys
+        # silently got the first twenty and no indication the rest existed.
+        # An Article 20 export that quietly omits data is the one thing it
+        # cannot be.
         api_key_repo = APIKeyRepository(self.session)
-        keys, _ = await api_key_repo.list(
-            filters={"user_id": user.id},
-        )
+        keys: list[Any] = []
+        while True:
+            page, total = await api_key_repo.list(
+                filters={"user_id": user.id},
+                skip=len(keys),
+                limit=_EXPORT_PAGE_SIZE,
+            )
+            keys.extend(page)
+            if not page or len(keys) >= total:
+                break
         api_keys = [
             {
                 "name": k.name,
@@ -523,4 +590,6 @@ class UserService:
             "profile": profile,
             "api_keys": api_keys,
             "activity": activity,
+            "activity_total": activity_total,
+            "activity_truncated": activity_total > len(activity),
         }
