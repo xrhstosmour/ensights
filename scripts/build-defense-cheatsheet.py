@@ -21,7 +21,6 @@ from docx.shared import RGBColor
 sys.path.insert(0, str(Path(__file__).parent))
 
 from defense_content import AUTHOR  # noqa: E402
-from defense_content import BACKUP_SLIDES  # noqa: E402
 from defense_content import KEY_NUMBERS  # noqa: E402
 from defense_content import SECTIONS  # noqa: E402
 from defense_content import SLIDES  # noqa: E402
@@ -184,12 +183,6 @@ def build():
     if pending:
         add_walkthrough(document, pending, heading)
 
-    add_walkthrough(
-        document,
-        [(f"B{index + 1}", spec) for index, spec in enumerate(BACKUP_SLIDES)],
-        "Εφεδρικές διαφάνειες, μετά το ευχαριστώ",
-    )
-
     document.add_page_break()
     paragraph(
         document,
@@ -230,14 +223,11 @@ def check():
     for index, spec in enumerate(SLIDES, start=1):
         if f"Διαφάνεια {index}: {slide_title(spec)}" not in text:
             problems.append(f"slide {index} missing from the walkthrough")
-    for index in range(1, len(BACKUP_SLIDES) + 1):
-        if f"Διαφάνεια B{index}:" not in text:
-            problems.append(f"backup slide B{index} missing from the walkthrough")
     rows = sum(len(table.rows) for table in document.tables)
     if rows != len(KEY_NUMBERS):
         problems.append(f"numbers card has {rows} rows, expected {len(KEY_NUMBERS)}")
 
-    print(f"{len(SLIDES)} slides plus {len(BACKUP_SLIDES)} backup, {rows} numbers")  # noqa: T201
+    print(f"{len(SLIDES)} slides, {rows} numbers")  # noqa: T201
     if problems:
         for problem in problems:
             print(f"  problem: {problem}")  # noqa: T201
