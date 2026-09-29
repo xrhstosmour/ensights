@@ -36,7 +36,6 @@ from pptx.util import Pt
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from defense_content import BACKUP_SLIDES  # noqa: E402
 from defense_content import SECTIONS  # noqa: E402
 from defense_content import SLIDES  # noqa: E402
 
@@ -923,10 +922,7 @@ def build():
     presentation.slide_height = Inches(SLIDE_HEIGHT)
     blank = presentation.slide_layouts[6]
 
-    everything = [(index + 1, spec) for index, spec in enumerate(SLIDES)]
-    everything += [(f"B{index + 1}", spec) for index, spec in enumerate(BACKUP_SLIDES)]
-
-    for number, spec in everything:
+    for number, spec in enumerate(SLIDES, start=1):
         slide = presentation.slides.add_slide(blank)
         label = f"slide {number}"
         layout = spec["layout"]
@@ -951,9 +947,10 @@ def check():
     presentation = Presentation(OUTPUT)
     problems = list(warnings)
 
-    expected = len(SLIDES) + len(BACKUP_SLIDES)
-    if len(presentation.slides) != expected:
-        problems.append(f"expected {expected} slides, found {len(presentation.slides)}")
+    if len(presentation.slides) != len(SLIDES):
+        problems.append(
+            f"expected {len(SLIDES)} slides, found {len(presentation.slides)}"
+        )
 
     for index, slide in enumerate(presentation.slides, start=1):
         notes = slide.notes_slide.notes_text_frame.text
@@ -976,7 +973,7 @@ def check():
                 )
 
     used = set()
-    for spec in SLIDES + BACKUP_SLIDES:
+    for spec in SLIDES:
         for key in ("left", "right", "below", "body"):
             for block in spec.get(key, []):
                 if block["type"] == "image":
@@ -992,7 +989,7 @@ def check():
     # the click and pointing at a chart gives the realistic floor.
     words = sum(len(notes_text(spec).split()) for spec in SLIDES)
     minutes = words / 110 + len(SLIDES) * 12 / 60
-    counted = f"{len(presentation.slides)} slides, {len(SLIDES)} numbered plus {len(BACKUP_SLIDES)} backup"
+    counted = f"{len(presentation.slides)} slides"
     print(counted)  # noqa: T201
     print(f"speaker notes: {words} words, about {minutes:.0f} minutes delivered")  # noqa: T201
     if not 20 <= minutes <= 30:
