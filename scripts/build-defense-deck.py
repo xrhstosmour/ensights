@@ -936,7 +936,6 @@ def build():
             layout_closing(slide, spec, str(number))
         else:
             layout_content(slide, spec, str(number), label)
-        slide.notes_slide.notes_text_frame.text = notes_text(spec)
 
     presentation.save(OUTPUT)
     return presentation
@@ -952,14 +951,13 @@ def check():
             f"expected {len(SLIDES)} slides, found {len(presentation.slides)}"
         )
 
-    for index, slide in enumerate(presentation.slides, start=1):
-        notes = slide.notes_slide.notes_text_frame.text
-        if not notes.strip():
-            problems.append(f"slide {index}: empty speaker notes")
+    for index, (slide, spec) in enumerate(zip(presentation.slides, SLIDES), start=1):
+        # The deck carries no speaker notes any more, so the phrasing check
+        # reads them from the content module instead of from the file.
         spoken = (
             " ".join(s.text_frame.text for s in slide.shapes if s.has_text_frame)
             + " "
-            + notes
+            + notes_text(spec)
         )
         for phrase in STIFF_PHRASES:
             if phrase in spoken:
