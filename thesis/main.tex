@@ -1,42 +1,28 @@
-% Master's thesis. Requires XeLaTeX (or LuaLaTeX) and biber.
-% Build with `make`, or `latexmk -xelatex main.tex`.
-\documentclass[12pt,a4paper,oneside]{report}
+% Master's thesis, formatted with the official dimscthesis class published by
+% the Department of Informatics and Telecommunications. Requires XeLaTeX and
+% biber. Build with `make`, or `latexmk -xelatex main.tex`.
+%
+% The class owns the cover, the examination committee page, the abstracts, the
+% acknowledgements, the table of contents and the lists of figures and tables.
+% Everything it prints is driven by the commands in metadata.tex and the
+% frontmatter files, so nothing below sets them directly.
+\documentclass[ack,oneside]{dimscthesis}
+
+\graphicspath{{figures/}}
 
 \input{preamble/packages}
-\input{preamble/fonts}
 \input{preamble/style}
+
 \input{metadata}
-\input{frontmatter/titlepage-body}
+\input{frontmatter/abstract-greek}
+\input{frontmatter/abstract-english}
+\input{frontmatter/acknowledgements}
 
 \begin{document}
 
-% The cover and the title page carry no page number.
-\pagenumbering{gobble}
-\input{frontmatter/cover}
-\input{frontmatter/titlepage}
-\input{frontmatter/titlepage-english}
-\input{frontmatter/committee}
-\input{frontmatter/copyright}
-\input{frontmatter/declaration}
+\frontmatter
 
-\pagenumbering{roman}
-\input{frontmatter/acknowledgements}
-\input{frontmatter/abstract-greek}
-\input{frontmatter/abstract-english}
-
-\tableofcontents
-\clearpage
-
-\listoftables
-\clearpage
-
-\listoffigures
-\clearpage
-
-\input{frontmatter/abbreviations}
-\input{frontmatter/glossary}
-
-\pagenumbering{arabic}
+\mainmatter
 \input{chapters/01-introduction}
 \input{chapters/02-background}
 \input{chapters/03-methodology}
@@ -46,8 +32,18 @@
 \input{chapters/07-forecasting-economics}
 \input{chapters/08-conclusions}
 
+\backmatter
+
+% The class prints the heading, this file holds only the table itself.
+\abbreviations
+\input{frontmatter/abbreviations}
+
+\input{frontmatter/glossary}
+
 \input{backmatter/appendix}
 
-\printbibliography[title=ΒΙΒΛΙΟΓΡΑΦΙΑ,heading=bibintoc]
+% The class names the bibliography ΑΝΑΦΟΡΕΣ through babel.
+{\footnotesize \bibliography{bibliography}}
+\addcontentsline{toc}{chapter}{ΑΝΑΦΟΡΕΣ}
 
 \end{document}
