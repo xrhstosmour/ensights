@@ -21,15 +21,31 @@ jobs:
     runs-on: ubuntu-latest
     # Same image, pinned to the same digest, the Makefile uses with
     # ENGINE=docker, so a local build and this job resolve identical TeX
-    # Live, biber and font versions. Pinned rather than `:latest`: that tag
+    # Live, bibtex and font versions. Pinned rather than `:latest`: that tag
     # drifts, and an upstream TeX Live update once broke the Greek
-    # biblatex-apa strings this manuscript depends on.
+    # bibliography strings this manuscript depends on.
     container: texlive/texlive@sha256:1cb66a6dc31fe153369c5bb63549aea31c2ffb351613af67b182d84c8521fe89
     defaults:
       run:
         working-directory: thesis
     steps:
       - uses: actions/checkout@v4
+
+      # The department's `dimscthesis` class sets Arial and Courier New, which
+      # no TeX distribution ships. Debian carries them in contrib, under
+      # Microsoft's own redistribution licence, so the job installs them
+      # rather than substituting a metric clone that would change the glyphs
+      # of the PDF that gets committed back.
+      - name: Install the class fonts
+        working-directory: .
+        run: |
+          sed -i "s/^Components: main$/Components: main contrib/" /etc/apt/sources.list.d/*.sources
+          apt-get update -qq
+          echo "ttf-mscorefonts-installer msttcorefonts/accepted-mscorefonts-eula select true" \
+            | debconf-set-selections
+          DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends \
+            ttf-mscorefonts-installer fontconfig
+          fc-cache -f
 
       - name: Compile thesis
         run: latexmk -xelatex -interaction=nonstopmode -halt-on-error -file-line-error main.tex

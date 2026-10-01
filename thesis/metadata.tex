@@ -1,71 +1,89 @@
 % All thesis-specific details live here, edit this file and nothing else in
-% the front matter. Every value is consumed by frontmatter/*.tex.
+% the front matter. Every value is consumed by dimscthesis.cls, which builds
+% the cover, the examination committee page and the abstracts from them.
 
-% Institution.
-\newcommand{\thesisuniversity}{ΕΘΝΙΚΟ ΚΑΙ ΚΑΠΟΔΙΣΤΡΙΑΚΟ ΠΑΝΕΠΙΣΤΗΜΙΟ ΑΘΗΝΩΝ}
-\newcommand{\thesisschool}{ΣΧΟΛΗ ΘΕΤΙΚΩΝ ΕΠΙΣΤΗΜΩΝ}
-\newcommand{\thesisdepartment}{ΤΜΗΜΑ ΠΛΗΡΟΦΟΡΙΚΗΣ ΚΑΙ ΤΗΛΕΠΙΚΟΙΝΩΝΙΩΝ}
+% Author. The template prints the name as "Όνομα Μ. Επώνυμο", where Μ. is the
+% initial of the father's first name, and the abbreviated form in the footer
+% of every page of the main body.
+\authorFirstGr{Χρήστος}
+\authorFirstAbrGr{Χ.}
+\authorMiddleGr{Δ.}
+\authorLastGr{Μουρτογιάννης}
+\authorFirstEn{Christos}
+\authorFirstAbrEn{C.}
+\authorMiddleEn{D.}
+\authorLastEn{Mourtogiannis}
+
+% Αριθμός μητρώου, printed on the examination committee page.
+\authorSN{ME1.20.0005}
 
 % The interdepartmental postgraduate programme this thesis is submitted to,
 % run jointly by the Department of Informatics and Telecommunications and the
-% Department of Economics. The Greek name is printed on the Greek title page,
-% the English one on the English title page.
-\newcommand{\thesisprogramme}{%
-  ΔΙΑΤΜΗΜΑΤΙΚΟ ΠΡΟΓΡΑΜΜΑ ΜΕΤΑΠΤΥΧΙΑΚΩΝ ΣΠΟΥΔΩΝ\\
+% Department of Economics.
+\programGr{%
+  ΔΙΑΤΜΗΜΑΤΙΚΟ ΠΡΟΓΡΑΜΜΑ ΜΕΤΑΠΤΥΧΙΑΚΩΝ ΣΠΟΥΔΩΝ
   «ΔΙΟΙΚΗΣΗ ΚΑΙ ΟΙΚΟΝΟΜΙΚΗ ΤΩΝ ΤΗΛΕΠΙΚΟΙΝΩΝΙΑΚΩΝ ΔΙΚΤΥΩΝ
   ΚΑΙ ΠΛΗΡΟΦΟΡΙΑΚΩΝ ΣΥΣΤΗΜΑΤΩΝ»%
 }
-\newcommand{\thesisprogrammeenglish}{%
-  Interdepartmental Postgraduate Programme in Management and Economics
-  of Telecommunication Networks and Information Systems%
+\programEn{%
+  INTERDEPARTMENTAL POSTGRADUATE PROGRAMME IN MANAGEMENT AND ECONOMICS
+  OF TELECOMMUNICATION NETWORKS AND INFORMATION SYSTEMS%
 }
-
-% Work type. Use ΠΤΥΧΙΑΚΗ ΕΡΓΑΣΙΑ for an undergraduate dissertation,
-% ΔΙΠΛΩΜΑΤΙΚΗ ΕΡΓΑΣΙΑ for a postgraduate one.
-\newcommand{\thesistype}{ΔΙΠΛΩΜΑΤΙΚΗ ΕΡΓΑΣΙΑ}
 
 % Titles. The Greek one is the title as registered on the department's
 % declaration form, character for character.
-\newcommand{\thesistitle}{%
-  ΕΞΑΓΩΓΗ ΕΥΦΥΩΝ ΑΝΑΛΥΣΕΩΝ ΑΠΟ ΔΕΔΟΜΕΝΑ ΗΛΕΚΤΡΟΝΙΚΟΥ ΕΜΠΟΡΙΟΥ%
+\titleGr{ΕΞΑΓΩΓΗ ΕΥΦΥΩΝ ΑΝΑΛΥΣΕΩΝ ΑΠΟ ΔΕΔΟΜΕΝΑ ΗΛΕΚΤΡΟΝΙΚΟΥ ΕΜΠΟΡΙΟΥ}
+\titleEn{EXTRACTION OF INTELLIGENT ANALYTICS FROM E-COMMERCE DATA}
+
+% Month and year printed on the cover. The template requires the month and
+% year of the examination, not of the writing.
+\dateGr{ΣΕΠΤΕΜΒΡΙΟΣ 2026}
+\dateEn{SEPTEMBER 2026}
+
+% Full examination date, printed on the examination committee page.
+\examinationDateGr{30 Σεπτεμβρίου 2026}
+\examinationDateEn{September 30, 2026}
+
+% Supervisor, who is also the first member of the examination committee.
+\advisorGr{Ευστάθιος Χατζηευθυμιάδης}
+\advisorRankGr{Καθηγητής}
+\advisorOrgGr{ΕΚΠΑ}
+\advisorEn{Efstathios Hadjiefthymiades}
+\advisorRankEn{Professor}
+\advisorOrgEn{NKUA}
+
+% Second member of the examination committee.
+\boardTwoGr{Κωνσταντίνος Κολομβάτσος}
+\boardTwoRankGr{Επίκουρος Καθηγητής}
+% The class lays the committee out as one line per member next to a wide
+% label, so this one is broken by hand to stay inside the right margin.
+\boardTwoOrgGr{\\Πανεπιστήμιο Θεσσαλίας}
+\boardTwoEn{Konstantinos Kolomvatsos}
+\boardTwoRankEn{Assistant Professor}
+\boardTwoOrgEn{University of Thessaly}
+
+% Third member of the examination committee.
+\boardThreeGr{Μιλτιάδης Κυριακάκος}
+\boardThreeRankGr{Εργαστηριακό Διδακτικό Προσωπικό}
+\boardThreeOrgGr{ΕΚΠΑ}
+\boardThreeEn{Miltiadis Kyriakakos}
+\boardThreeRankEn{Laboratory Teaching Staff}
+\boardThreeOrgEn{NKUA}
+
+% Supervisors block on the cover and the committee page. A single supervisor
+% keeps the default heading, ΕΠΙΒΛΕΠΩΝ.
+\supervisorsGr{%
+  {\bfseries Ευστάθιος Χατζηευθυμιάδης}, Καθηγητής ΕΚΠΑ%
 }
-\newcommand{\thesistitleenglish}{%
-  EXTRACTION OF INTELLIGENT ANALYTICS FROM E-COMMERCE DATA%
+\supervisorsEn{%
+  {\bfseries Efstathios Hadjiefthymiades}, Professor NKUA%
 }
 
-% Ranks stay recorded below but are not printed: the department's
-% declaration form asks for names alone. Switching this to
-% \thesisshowrankstrue prints them everywhere they appear.
-\newif\ifthesisshowranks
-\thesisshowranksfalse
-
-% People.
-\newcommand{\thesisauthor}{Χρήστος Μουρτογιάννης}
-\newcommand{\thesisauthorlatin}{Mourtogiannis, Christos}
-
-\newcommand{\thesissupervisor}{Ευστάθιος Χατζηευθυμιάδης}
-\newcommand{\thesissupervisorrank}{%
-  Καθηγητής Τμήματος Πληροφορικής και Τηλεπικοινωνιών, ΕΚΠΑ%
-}
-
-\newcommand{\thesiscommitteesecond}{Κωνσταντίνος Κολομβάτσος}
-\newcommand{\thesiscommitteesecondrank}{%
-  Επίκουρος Καθηγητής Τμήματος Πληροφορικής και Τηλεπικοινωνιών,
-  Πανεπιστήμιο Θεσσαλίας%
-}
-
-\newcommand{\thesiscommitteethird}{Μιλτιάδης Κυριακάκος}
-\newcommand{\thesiscommitteethirdrank}{%
-  Εργαστηριακό Διδακτικό Προσωπικό Τμήματος Πληροφορικής και
-  Τηλεπικοινωνιών, ΕΚΠΑ%
-}
-
-\newcommand{\thesisheadofdepartment}{Δημήτριος Γουνόπουλος}
-\newcommand{\thesisheadofdepartmentrank}{%
-  Καθηγητής Τμήματος Πληροφορικής και Τηλεπικοινωνιών, ΕΚΠΑ%
-}
-
-% Place and date.
-\newcommand{\thesisplace}{Αθήνα}
-\newcommand{\thesismonth}{Σεπτέμβριος}
-\newcommand{\thesisyear}{2026}
+% Subject area and keywords, printed after each abstract. The template allows
+% up to five keywords.
+\subjectAreaGr{Εξόρυξη Δεδομένων και Επιχειρηματική Ευφυΐα}
+\keywordsGr{εξόρυξη δεδομένων, ηλεκτρονικό εμπόριο, συχνά υποσύνολα,
+  συσταδοποίηση, επιχειρηματική ευφυΐα}
+\subjectAreaEn{Data Mining and Business Intelligence}
+\keywordsEn{data mining, electronic commerce, frequent itemsets, clustering,
+  business intelligence}

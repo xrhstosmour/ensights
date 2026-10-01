@@ -1,6 +1,9 @@
 % Appendices are lettered with Greek capitals, and the figures and tables
 % inside them are numbered after their appendix letter.
-\appendix
+% The class switches the chapter heading to "ΠΑΡΑΡΤΗΜΑ <γράμμα>. ΤΙΤΛΟΣ"
+% once \appendixstartedtrue is set inside the appendix environment.
+\begin{appendix}
+\appendixstartedtrue
 \renewcommand{\thechapter}{\greekalphnum{chapter}}
 
 % Bookmarks and internal anchors cannot carry the Greek numeral, which is not
@@ -8,7 +11,7 @@
 % the printed letter changes; every reference still resolves.
 \renewcommand{\theHchapter}{appendix.\arabic{chapter}}
 
-\chapter{Πηγαίος κώδικας}
+\chapter{ΠΗΓΑΙΟΣ ΚΩΔΙΚΑΣ}
 \label{app:code}
 
 Παρατίθενται τα δύο αποσπάσματα στα οποία συμπυκνώνονται οι μεθοδολογικές
@@ -104,7 +107,7 @@ for customer, before in previous.items():
         result.churned += before
 \end{lstlisting}
 
-\chapter{Αναλυτικά αποτελέσματα}
+\chapter{ΑΝΑΛΥΤΙΚΑ ΑΠΟΤΕΛΕΣΜΑΤΑ}
 \label{app:results}
 
 \section{Πλήρες πλέγμα ευαισθησίας των μοναδιαίων οικονομικών}
@@ -120,6 +123,8 @@ for customer, before in previous.items():
 
 \begin{table}[H]
 \centering
+\caption{Πλήρες πλέγμα ευαισθησίας, 16 κελιά}
+\label{tab:sensitivity-full}
 \begin{tabular}{rrrrc}
 \toprule
 Περιθώριο & CAC & LTV & LTV:CAC & Πληροί 3:1 \\
@@ -145,8 +150,6 @@ for customer, before in previous.items():
 0,60 & 900 & 1.737 &  1,93 & όχι \\
 \bottomrule
 \end{tabular}
-\caption{Πλήρες πλέγμα ευαισθησίας, 16 κελιά}
-\label{tab:sensitivity-full}
 \end{table}
 
 Οκτώ κελιά πληρούν το σημείο αναφοράς 3:1 και οκτώ όχι. Το κρίσιμο σημείο δεν
@@ -160,3 +163,5 @@ for customer, before in previous.items():
 πίνακα~\ref{tab:silhouette}. Η τιμή $k=2$ υπερέχει σαφώς, και η πτώση από
 0,8793 σε 0,7206 με μία μόνο επιπλέον συστάδα δείχνει ότι η δομή των δεδομένων
 είναι δυαδική και όχι βαθμιαία: η εγχώρια αγορά έναντι των εξαγωγικών.
+
+\end{appendix}
