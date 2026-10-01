@@ -16,6 +16,14 @@
 *.toc
 *.xdv
 
+# The university emblem the class puts on the cover is an input, not an
+# artefact, the same way the figures are.
+!emblems/*.pdf
+
+# Arial and Courier New staged from the host for the container build. The
+# class needs them, their licence does not allow redistribution here.
+.fonts/
+
 # Figures are inputs, not artefacts. The notebooks produce them against the
 # imported dataset, which is not committed, so a clean checkout could not
 # compile the manuscript without them.
