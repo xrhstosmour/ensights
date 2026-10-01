@@ -1,6 +1,9 @@
 % Appendices are lettered with Greek capitals, and the figures and tables
 % inside them are numbered after their appendix letter.
-\appendix
+% The class switches the chapter heading to "ΠΑΡΑΡΤΗΜΑ <γράμμα>. ΤΙΤΛΟΣ"
+% once \appendixstartedtrue is set inside the appendix environment.
+\begin{appendix}
+\appendixstartedtrue
 \renewcommand{\thechapter}{\greekalphnum{chapter}}
 
 % Bookmarks and internal anchors cannot carry the Greek numeral, which is not
@@ -160,3 +163,5 @@ for customer, before in previous.items():
 πίνακα~\ref{tab:silhouette}. Η τιμή $k=2$ υπερέχει σαφώς, και η πτώση από
 0,8793 σε 0,7206 με μία μόνο επιπλέον συστάδα δείχνει ότι η δομή των δεδομένων
 είναι δυαδική και όχι βαθμιαία: η εγχώρια αγορά έναντι των εξαγωγικών.
+
+\end{appendix}

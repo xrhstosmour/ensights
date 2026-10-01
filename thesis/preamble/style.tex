@@ -1,60 +1,23 @@
-% Body text is justified at 1.5 line spacing, as is conventional for the
-% department's submissions.
-\onehalfspacing
-\setlength{\parindent}{0pt}
-\setlength{\parskip}{6pt plus 2pt minus 1pt}
+% The class owns fonts, geometry, spacing, headers and heading styles, and
+% babel supplies the Greek caption names the department template uses
+% (ΠΕΡΙΕΧΟΜΕΝΑ, ΚΑΤΑΛΟΓΟΣ ΣΧΗΜΑΤΩΝ, ΚΑΤΑΛΟΓΟΣ ΠΙΝΑΚΩΝ, Σχήμα, Πίνακας).
+% Only what the class leaves undefined lives here.
 
-% Headings. The department template numbers chapters plainly, as "1.Title",
-% without the report class's chapter-word prefix and without forcing each
-% chapter onto a fresh page break style of its own.
-\usepackage{titlesec}
+% The manuscript marks inline English terms with \textenglish, which is a
+% polyglossia command. The class uses babel, so the same name is kept as a
+% thin wrapper and every call site stays untouched.
+\newcommand{\textenglish}[1]{\foreignlanguage{english}{#1}}
 
-\titleformat{\chapter}[hang]
-  {\normalfont\Large\bfseries}{\thechapter.}{0.5em}{}
-\titlespacing*{\chapter}{0pt}{0pt}{18pt}
+% The manuscript cites with the biblatex command name. Plain bibtex offers
+% one shape, the bracketed number, so the alias keeps the call sites unchanged.
+\newcommand{\parencite}[1]{\cite{#1}}
 
-\titleformat{\section}[hang]
-  {\normalfont\large\bfseries}{\thesection}{0.5em}{}
-\titlespacing*{\section}{0pt}{18pt}{9pt}
-
-\titleformat{\subsection}[hang]
-  {\normalfont\normalsize\bfseries}{\thesubsection}{0.5em}{}
-\titlespacing*{\subsection}{0pt}{14pt}{7pt}
-
-% Front matter headings that are not numbered chapters, for example the
-% acknowledgements and the abstracts, share the chapter look but stay out of
-% the numbering sequence while still appearing in the table of contents.
+% Unnumbered chapters that still appear in the table of contents, used by the
+% glossary. The class provides the same thing for the abbreviations table.
 \newcommand{\unnumberedchapter}[1]{%
   \chapter*{#1}%
   \addcontentsline{toc}{chapter}{#1}%
 }
-
-% Section names, matching the department template's exact wording.
-%
-% The timing here is fiddly. polyglossia \def's \captionsgreek to a variant
-% macro (\monogreekcaptions and friends) while processing \setmainlanguage in
-% the preamble, then *executes* it later when the language is actually
-% selected, which happens after the begin-document hooks. So a plain
-% \renewcommand, whether in the preamble or in \AtBeginDocument, is always
-% overwritten, and appending in the preamble is discarded by that \def.
-% Appending to \captionsgreek does not survive either, because polyglossia
-% re-\def's it to the variant macro on every language selection. The variant
-% macro itself, \monogreekcaptions for the default monotonic Greek, is defined
-% once when gloss-greek.ldf loads and is never redefined, so appending there
-% is what actually sticks. Revisit this if the Greek variant ever changes to
-% polytonic or ancient, which use \polygreekcaptions/\ancientgreekcaptions.
-\gappto\monogreekcaptions{%
-  \renewcommand{\contentsname}{ΠΙΝΑΚΑΣ ΠΕΡΙΕΧΟΜΕΝΩΝ}%
-  \renewcommand{\listtablename}{ΚΑΤΑΛΟΓΟΣ ΠΙΝΑΚΩΝ}%
-  \renewcommand{\listfigurename}{ΚΑΤΑΛΟΓΟΣ ΔΙΑΓΡΑΜΜΑΤΩΝ/ΕΙΚΟΝΩΝ}%
-  \renewcommand{\bibname}{ΒΙΒΛΙΟΓΡΑΦΙΑ}%
-  \renewcommand{\appendixname}{ΠΑΡΑΡΤΗΜΑ}%
-  \renewcommand{\tablename}{Πίνακας}%
-  \renewcommand{\figurename}{Εικόνα}%
-}
-
-% Table captions sit below the table in the department template, so
-% \caption is always placed after the tabular body in this document.
 
 % Appendices are lettered with Greek capitals rather than the
 % Latin A, B, C that \Alph produces. Note that the department template skips
@@ -87,3 +50,6 @@
   inputencoding   = utf8,
 }
 \lstset{style=thesis}
+
+% listings keeps its English caption name under babel.
+\renewcommand{\lstlistingname}{Κώδικας}
