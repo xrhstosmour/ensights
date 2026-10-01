@@ -76,9 +76,24 @@ jobs:
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         working-directory: .
         run: |
-          author_slug=$(sed -n 's/.*\\thesisauthorlatin}{\(.*\)}/\1/p' thesis/metadata.tex \
-            | tr -d ',' | tr ' ' '-')
-          destination="documents/${author_slug:-thesis}-thesis.pdf"
+          # The document class takes the author in parts, so the slug is
+          # assembled from the Latin surname and first name, the same way
+          # scripts/export-thesis.sh does it. An empty slug is a hard failure:
+          # falling back to a placeholder name writes the PDF to a path git
+          # does not track, and the step then reports nothing to commit while
+          # the committed PDF silently goes stale.
+          author_last=$(sed -n 's/^\\authorLastEn{\(.*\)}.*/\1/p' thesis/metadata.tex)
+          author_first=$(sed -n 's/^\\authorFirstEn{\(.*\)}.*/\1/p' thesis/metadata.tex)
+          if [ -z "$author_last" ] || [ -z "$author_first" ]; then
+            echo "Could not read the author name from thesis/metadata.tex."
+            exit 1
+          fi
+          author_slug=$(echo "${author_last}-${author_first}" | tr ' ' '-')
+          destination="documents/${author_slug}-thesis.pdf"
+          if [ ! -f "$destination" ]; then
+            echo "$destination is not the committed export, refusing to guess."
+            exit 1
+          fi
           cp thesis/main.pdf "$destination"
 
           # This must come first. The container runs as a different user than
