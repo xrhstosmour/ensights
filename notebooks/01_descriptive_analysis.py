@@ -91,7 +91,17 @@ if not products.empty:
 # breakdown, because a sale without a known buyer is still a sale.
 
 # %%
-print(reports["top_customers"].head(10).to_string(index=False))
+customers = reports["top_customers"]
+print(customers.head(10).to_string(index=False))
+
+if not customers.empty:
+    figure, axes = plt.subplots(figsize=(10, 5))
+    top = customers.head(10).iloc[::-1]
+    axes.barh(top["customer_identifier"].astype(str), top["revenue"].astype(float))
+    axes.set_xlabel("Έσοδα")
+    axes.set_title("Πελάτες με τις μεγαλύτερες αγορές")
+    figure.tight_layout()
+    figure.savefig(FIGURES / "top_customers.pdf")
 
 # %% [markdown]
 # ## 3. Regions with the most sales
