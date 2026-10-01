@@ -382,8 +382,14 @@ without restarting beat.
 
 ## Exporting the thesis PDF
 
+The manuscript is built with `dimscthesis`, the class the Department of
+Informatics and Telecommunications publishes, vendored unchanged at
+`thesis/dimscthesis.cls`. It sets Arial, which no TeX distribution ships: a
+local build picks it up from the system, a container build stages it from
+`/System/Library/Fonts/Supplemental`, and CI installs it from Debian contrib.
+
 ```bash
-./scripts/export-thesis.sh          # needs local XeLaTeX + biber
+./scripts/export-thesis.sh          # needs local XeLaTeX + bibtex
 ./scripts/export-thesis.sh --docker # or build inside a TeX Live container
 ```
 
