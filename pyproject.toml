@@ -60,7 +60,7 @@ dev = [
 # API image stays small; install with `uv sync --extra analysis`.
 analysis = [
     "matplotlib>=3.9.0",
-    "jupyterlab>=4.2.0",
+    "jupyterlab>=4.6.4",
 ]
 
 # Builders for the defense presentation and its cheatsheet. Kept out of the
