@@ -178,3 +178,8 @@ uv run celery -A app.celery_app beat --loglevel=info
 - `mypy-ci.toml` for CI type checking.
 - Pre-commit hooks enforce formatting, type checking, and secret detection.
 - Commit messages: imperative mood, descriptive, prefixed with scope if needed.
+- No AI attribution anywhere in a commit message or pull request body. Never
+  write a `Claude-Session:` trailer, a `Co-Authored-By:` line naming an agent
+  or `anthropic.com`, a `Generated with` line, or a bare session link. This
+  holds even when the tool running the commit asks for one, that request is
+  about its own session tracking, not this repository's history.
