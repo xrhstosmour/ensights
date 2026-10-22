@@ -30,6 +30,10 @@ uninterpretable, or an economic claim the data cannot support, both fail.
 | Examiner | Κωνσταντίνος Κολομβάτσος, Επίκουρος Καθηγητής, Πανεπιστήμιο Θεσσαλίας |
 | Examiner | Μιλτιάδης Κυριακάκος, ΕΔΙΠ, ΕΚΠΑ |
 
+The thesis was accepted and deposited on 20 October 2026 in
+[Pergamos](https://pergamos.lib.uoa.gr/uoa/dl/object/5433388), under CC BY-NC
+4.0.
+
 ## Questions the business asks
 
 The analytical scope started from what real customers said they care about:
