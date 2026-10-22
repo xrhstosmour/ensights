@@ -16,6 +16,10 @@ growth accounting, and unit economics, exposed through a REST API and a set
 of Metabase dashboards. The manuscript itself lives in [`thesis/`](thesis/),
 built from the same code and data this repository runs.
 
+The thesis was accepted and is openly available in the university repository
+[Pergamos](https://pergamos.lib.uoa.gr/uoa/dl/object/5433388). To cite it, see
+[`CITATION.cff`](CITATION.cff).
+
 ## What this actually does, in plain words
 
 An online shop already records every sale it makes. That record is usually
@@ -165,7 +169,9 @@ endpoint, and how to do the same by hand if you would rather.
 The demo seed is synthetic and its numbers match nothing in the manuscript.
 Download the [Online Retail II
 dataset](https://archive.ics.uci.edu/dataset/502/online+retail+ii), export both
-sheets to CSV, then import each one:
+sheets to CSV, then import each one. The dataset is by Daqing Chen, released
+under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) and not
+redistributed here:
 
 ```bash
 uv run --env-file .env python -c "
@@ -397,4 +403,6 @@ Output: `documents/<author>-thesis.pdf`, the file to hand over.
 
 ## License
 
-MIT License, see [LICENSE](LICENSE) file.
+The code is under the MIT License, see [LICENSE](LICENSE) file. The thesis
+manuscript in `thesis/` and the deposited PDF are under
+[CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/).
