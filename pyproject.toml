@@ -5,7 +5,7 @@ description = "Generic e-commerce business intelligence platform: data mining an
 readme = "README.md"
 requires-python = ">=3.14"
 authors = [
-    {name = "Christos Mouratidis", email = "xrhstosmour@gmail.com"}
+    {name = "Christos Mourtogiannis", email = "xrhstosmour@gmail.com"}
 ]
 
 dependencies = [
@@ -63,11 +63,10 @@ analysis = [
     "jupyterlab>=4.6.4",
 ]
 
-# Builders for the defense presentation and its cheatsheet. Kept out of the
-# runtime dependencies; install with `uv sync --extra documents`.
+# Builder for the defense presentation. Kept out of the runtime dependencies;
+# install with `uv sync --extra documents`.
 documents = [
     "python-pptx>=1.0.2",
-    "python-docx>=1.1.2",
 ]
 
 [build-system]

@@ -1,0 +1,11 @@
+cff-version: 1.2.0
+message: If you use this work, please cite the thesis.
+type: thesis
+title: Extraction of Intelligent Analytics from E-Commerce Data
+authors:
+  - family-names: Mourtogiannis
+    given-names: Christos
+date-released: 2026-10-20
+url: https://pergamos.lib.uoa.gr/uoa/dl/object/5433388
+repository-code: https://github.com/xrhstosmour/ensights
+license: MIT
