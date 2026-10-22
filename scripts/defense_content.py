@@ -1,7 +1,7 @@
-"""Content of the thesis defense presentation and its cheatsheet.
+"""Content of the thesis defense presentation.
 
-Both `build-defense-deck.py` and `build-defense-cheatsheet.py` import this
-module, so the slide order, the titles and the walkthrough can never disagree.
+`build-defense-deck.py` imports this module, so the slide order, the titles and
+the walkthrough live in one place.
 
 Every number here is copied from `documents/methodology/*.md` and
 `thesis/chapters/*.tex`. Nothing is recomputed, so the slides cannot drift away
@@ -1197,51 +1197,4 @@ SLIDES = [
             ),
         },
     },
-]
-
-
-# Quick-recall card at the end of the cheatsheet.
-KEY_NUMBERS = [
-    (
-        "Δεδομένα",
-        "39.516 παραγγελίες, 1.002.423 γραμμές, 5.875 πελάτες, 4.900 προϊόντα, 43 περιοχές",
-    ),
-    ("Επιστροφές", "17.925 εγγραφές, κρατημένες ξεχωριστά με θετικό πρόσημο"),
-    ("Καλάθια", "36.269 με δύο ή περισσότερα προϊόντα, διάμεσο 17, μέγιστο 1.108"),
-    (
-        "Mining, support 0,02",
-        "385 συχνά σύνολα, 134 κανόνες, ίδια και από τους δύο αλγορίθμους",
-    ),
-    ("Ταχύτητα", "Apriori 5,14 s, FP-Growth 1,96 s, 2,6 φορές πιο γρήγορος"),
-    ("Δυνατότερος κανόνας", "Παραλλαγές REGENCY TEACUP AND SAUCER, lift 25,2"),
-    (
-        "Ομαδοποίηση",
-        "k ίσον 2, silhouette 0,8793. ΗΒ μόνο του, 42 αγορές εξαγωγής μαζί",
-    ),
-    ("Ενεργοί μήνες", "ΗΒ 25,0 από 25. Εξαγωγές 12,8 κατά μέσο όρο"),
-    (
-        "Whales",
-        "3 πελάτες στις εξαγωγές, 25 στο ΗΒ, με 120 ως 220 παραγγελίες ο καθένας",
-    ),
-    ("Πρόβλεψη", "Skill score −0,21 με τον κομμένο μήνα μέσα, +0,1421 χωρίς αυτόν"),
-    ("Σφάλμα", "MAPE 38,48% η απλοϊκή εκτίμηση, 32,74% το Holt-Winters"),
-    (
-        "Πελάτες",
-        "72,4% ξαναγόρασαν, 6,25 παραγγελίες ο καθένας, μέση παραγγελία 493,63",
-    ),
-    (
-        "Συγκέντρωση",
-        "Gini 0,740. Το κορυφαίο 20% κάνει το 77,1%. Ο μεγαλύτερος πελάτης 3,3%",
-    ),
-    ("Κερδοφορία", "16 κελιά, 8 περνάνε το 3:1 και 8 όχι. Μέση αξία πελάτη 2.895"),
-    ("Έσοδα ανά τιμή", "Το εύρος 1 ως 5 λίρες φέρνει το 64% των εσόδων"),
-    (
-        "Αταξινόμητα",
-        "38,9% των εσόδων, γιατί δεν υπάρχει κατηγορία προϊόντος στην πηγή",
-    ),
-    ("Ηνωμένο Βασίλειο", "Περίπου 86% των συνολικών εσόδων"),
-    (
-        "Endpoints",
-        "22 ανάλυσης, 21 ερωτήματα και 1 εισαγωγής. 12 κάρτες SQL σε 3 dashboards",
-    ),
 ]
