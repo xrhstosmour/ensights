@@ -5,7 +5,7 @@ description = "Generic e-commerce business intelligence platform: data mining an
 readme = "README.md"
 requires-python = ">=3.14"
 authors = [
-    {name = "Christos Mouratidis", email = "xrhstosmour@gmail.com"}
+    {name = "Christos Mourtogiannis", email = "xrhstosmour@gmail.com"}
 ]
 
 dependencies = [
