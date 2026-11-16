@@ -29,7 +29,7 @@ jobs:
       run:
         working-directory: thesis
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       # The department's `dimscthesis` class sets Arial and Courier New, which
       # no TeX distribution ships. Debian carries them in contrib, under
@@ -60,7 +60,7 @@ jobs:
             exit 1
           fi
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: thesis-pdf
           path: thesis/main.pdf
